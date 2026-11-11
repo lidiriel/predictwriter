@@ -4,10 +4,14 @@ Predictive word completion for LibreOffice Writer, backed by Hunspell dictionari
 To install it, see [Installation](#installation).
 
 
-Writing a letter by Anatole France: 
+Writing a letter by Anatole France:
+
 https://github.com/user-attachments/assets/9496e424-ec04-4483-b57f-5fda7c5552b1
 
-
+*Text: opening of Anatole France's letter to Marcel Cachin, « On croit mourir pour la
+patrie, on meurt pour des industriels », published in* L'Humanité *on 18 July 1922
+(public domain). Typed with context prediction on (Wikipedia model): 836 characters in
+635 keystrokes, 24% fewer.*
 
 ## Status: suggestion list + context prediction + French grammar
 
