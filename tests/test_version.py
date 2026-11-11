@@ -29,3 +29,45 @@ def test_mismatch_is_rejected(tmp_path):
     )
     with pytest.raises(ValueError, match="mismatch"):
         build_oxt.check_version(tmp_path)
+
+
+def test_describe():
+    from predictive import buildinfo
+
+    info = {
+        "version": "1.0",
+        "commit": "04ab2b9",
+        "commit_date": "2026-11-11T20:35:10+01:00",
+    }
+    assert (
+        buildinfo.describe(info)
+        == "Predictive Writer 1.0 — commit 04ab2b9 of 2026-11-11 20:35"
+    )
+    info["modified"] = True
+    assert buildinfo.describe(info).endswith("(with uncommitted changes)")
+    assert buildinfo.describe({"version": "1.0", "built": "2026-11-12T08:00:00"}) == (
+        "Predictive Writer 1.0 — built 2026-11-12 08:00"
+    )
+    assert "development version" in buildinfo.describe({})
+
+
+def test_buildinfo_is_written_into_the_archive(tmp_path):
+    import json
+    import zipfile
+
+    src = tmp_path / "ext"
+    (src / "python" / "pythonpath" / "predictive").mkdir(parents=True)
+    (src / "description.xml").write_text('<version value="2.3"/>', encoding="utf-8")
+    out = tmp_path / "x.oxt"
+    info = build_oxt.build_info("2.3", ROOT)
+    build_oxt.build(src, out, info)
+    with zipfile.ZipFile(out) as z:
+        stored = json.loads(z.read(build_oxt.BUILDINFO_PATH))
+    assert stored["version"] == "2.3" and stored["built"]
+    # This project is a git repository: the last commit is recorded.
+    assert len(stored["commit"]) >= 7 and stored["commit_date"][:4].isdigit()
+    assert not (src / build_oxt.BUILDINFO_PATH).exists()  # source tree untouched
+
+
+def test_git_info_outside_a_repository(tmp_path):
+    assert build_oxt.git_info(tmp_path) == {}

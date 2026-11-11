@@ -194,7 +194,7 @@ space** in the Options page (restart LibreOffice if Writer was already open).
 
 `log.txt`, in the same `predictive-writer` folder, should contain after opening Writer:
 
-- `Predictive Writer 1.0 starting`
+- `Predictive Writer 1.0 — commit … starting` (the version and the commit it was built from)
 - `loaded fr_FR: 449932 words` a few seconds later
 - `context prediction: using …` if the model is in place and the options are ticked
 
@@ -219,6 +219,10 @@ The version (major.minor) is set in two places that must agree, checked by
 `build_oxt.py` and by the tests: `extension/description.xml` (`<version value="1.0"/>`,
 shown by LibreOffice) and `extension/python/pythonpath/predictive/__init__.py`
 (`__version__`). Installing a newer `.oxt` with `unopkg add -f` replaces the old one.
+
+`build_oxt.py` also stores the last git commit (short hash and date, and whether there
+were uncommitted changes) inside the `.oxt`; the bottom of the Options page shows it,
+e.g. *Predictive Writer 1.0 — commit 04ab2b9 of 2026-11-11 20:35*.
 
 ### Word lists
 

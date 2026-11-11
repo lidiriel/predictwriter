@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Adds Tools → Options → Languages and Locales → Predictive Text.
+     "LanguageSettings" is the internal name of the built-in
+     "Languages and Locales" node. -->
+<oor:component-data xmlns:oor="http://openoffice.org/2001/registry"
+                    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                    oor:name="OptionsDialog" oor:package="org.openoffice.Office">
+  <node oor:name="Nodes">
+    <node oor:name="LanguageSettings" oor:op="fuse">
+      <node oor:name="Leaves">
+        <node oor:name="net.scilink.predictivewriter.OptionsPage" oor:op="fuse">
+          <prop oor:name="Id">
+            <value>net.scilink.predictivewriter</value>
+          </prop>
+          <prop oor:name="Label">
+            <value xml:lang="en-US">Predictive Text</value>
+            <value xml:lang="fr">Texte prédictif</value>
+          </prop>
+          <prop oor:name="OptionsPage">
+            <value>%origin%/dialogs/OptionsPage.xdl</value>
+          </prop>
+          <prop oor:name="EventHandlerService">
+            <value>net.scilink.predictivewriter.OptionsHandler</value>
+          </prop>
+        </node>
+      </node>
+    </node>
+  </node>
+</oor:component-data>

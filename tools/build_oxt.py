@@ -3,11 +3,17 @@
 
 The version (major.minor, e.g. ``1.0``) is read from
 ``extension/description.xml`` and must match ``predictive.__version__``.
+A ``buildinfo.json`` is added inside the archive (not in the source tree)
+with the version and the last git commit (hash, date, uncommitted changes),
+shown at the bottom of the Options page.
 """
 
 import argparse
+import datetime
+import json
 import os
 import re
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -51,7 +57,41 @@ def check_version(src: Path) -> str:
     return declared
 
 
-def build(src: Path, out: Path) -> int:
+BUILDINFO_PATH = "python/pythonpath/predictive/buildinfo.json"
+
+
+def git_info(root: Path) -> dict:
+    """Last commit (short hash, ISO date) and whether tracked files changed.
+
+    Returns ``{}`` if ``root`` is not a git repository or git is missing.
+    """
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(root), *args],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    try:
+        commit, date = git("log", "-1", "--format=%h%n%cI").splitlines()
+        changes = git("status", "--porcelain", "--untracked-files=no")
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return {}
+    return {"commit": commit, "commit_date": date, "modified": bool(changes)}
+
+
+def build_info(version: str, root: Path = ROOT) -> dict:
+    info = {
+        "version": version,
+        "built": datetime.datetime.now().isoformat(timespec="seconds"),
+    }
+    info.update(git_info(root))
+    return info
+
+
+def build(src: Path, out: Path, info: dict = None) -> int:
     """Write the .oxt archive and return the number of files added."""
     out.parent.mkdir(parents=True, exist_ok=True)
     count = 0
@@ -64,6 +104,9 @@ def build(src: Path, out: Path) -> int:
                     continue
                 zf.write(path, path.relative_to(src).as_posix())
                 count += 1
+        if info is not None:
+            zf.writestr(BUILDINFO_PATH, json.dumps(info, indent=2) + "\n")
+            count += 1
     return count
 
 
@@ -79,8 +122,14 @@ def main() -> None:
     except ValueError as exc:
         sys.exit("error: %s" % exc)
     out = args.out or ROOT / "dist" / ("predictive-writer-%s.oxt" % version)
-    count = build(args.src, out)
-    print("wrote %s (version %s, %d files)" % (out, version, count))
+    info = build_info(version)
+    count = build(args.src, out, info)
+    if "commit" in info:
+        state = " + uncommitted changes" if info["modified"] else ""
+        origin = "commit %s of %s%s" % (info["commit"], info["commit_date"], state)
+    else:
+        origin = "no git information"
+    print("wrote %s (version %s, %s, %d files)" % (out, version, origin, count))
 
 
 if __name__ == "__main__":
