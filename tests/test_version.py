@@ -71,3 +71,16 @@ def test_buildinfo_is_written_into_the_archive(tmp_path):
 
 def test_git_info_outside_a_repository(tmp_path):
     assert build_oxt.git_info(tmp_path) == {}
+
+
+def test_license_is_in_the_archive(tmp_path):
+    import zipfile
+
+    src = tmp_path / "ext"
+    src.mkdir()
+    (src / "description.xml").write_text('<version value="1.0"/>', encoding="utf-8")
+    out = tmp_path / "x.oxt"
+    build_oxt.build(src, out)
+    with zipfile.ZipFile(out) as z:
+        text = z.read("LICENSE").decode("utf-8")
+    assert "Mozilla Public License Version 2.0" in text and "Ludovic Mercier" in text

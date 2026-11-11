@@ -59,6 +59,10 @@ Completion → Enable word completion**), otherwise both complete at once.
 
 **Tools → Options → Languages and Locales → Predictive Text**:
 
+![The Predictive Text page of the LibreOffice Options](docs/options-page.png)
+
+The bottom of the page shows the version and the git commit the extension was built from.
+
 | Setting | Default |
 | --- | --- |
 | Suggest word completions while typing | on |
@@ -73,14 +77,16 @@ Completion → Enable word completion**), otherwise both complete at once.
 | Predict the next word after a space (n-gram model) | off |
 | Accept a completion with: Tab or Enter, Tab only, Enter only | Tab or Enter |
 | Accept a next-word prediction with: same choices | Tab only (Enter keeps making a new paragraph) |
-| Log keystrokes and suggestions | off |
 
 Changes apply as soon as you press OK or Apply, without restarting. Automatic
 language detection from the text comes in Phase 2.
 
 The settings are stored in `~/.config/libreoffice/4/user/predictive-writer/settings.json`.
-If you edit that file by hand, restart LibreOffice. With logging on, `log.txt` in the
-same folder contains what you type; it never leaves your machine.
+If you edit that file by hand, restart LibreOffice.
+
+**Troubleshooting log:** `"debug": true` in `settings.json` (not on the Options page) logs
+every keystroke and suggestion to `log.txt` in the same folder. The log then contains what
+you type; it never leaves your machine. Set it back to `false` when you are done.
 
 ### Context prediction (n-grams)
 
@@ -253,3 +259,15 @@ python3 -m pytest tests/        # needs pytest; no LibreOffice required
 
 `tests/test_french_real.py` checks the behaviour on the real French data (frequency
 order, verb agreement, elisions) and is skipped if `extension/data/` is missing.
+
+## Licence
+
+Predictive Writer is © 2026 Ludovic Mercier, under the
+[Mozilla Public License 2.0](LICENSE) (the same licence as LibreOffice and the French
+Dicollecte dictionary). The `.oxt` includes this `LICENSE` file.
+
+Bundled third-party code and data keep their own licences — pressagio (Apache 2.0), word
+lists derived from Hunspell dictionaries (MPL 2.0 / SCOWL), word frequencies from
+OpenSubtitles and elision scores from Wikipedia (CC BY-SA 4.0) — see
+[extension/NOTICE.md](extension/NOTICE.md). An n-gram model you build from Wikipedia is
+CC BY-SA 4.0 too (see Context prediction).

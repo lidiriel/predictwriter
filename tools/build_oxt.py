@@ -58,6 +58,7 @@ def check_version(src: Path) -> str:
 
 
 BUILDINFO_PATH = "python/pythonpath/predictive/buildinfo.json"
+LICENSE_FILE = ROOT / "LICENSE"  # copied to the root of the archive
 
 
 def git_info(root: Path) -> dict:
@@ -91,7 +92,9 @@ def build_info(version: str, root: Path = ROOT) -> dict:
     return info
 
 
-def build(src: Path, out: Path, info: dict = None) -> int:
+def build(
+    src: Path, out: Path, info: dict = None, license_file: Path = LICENSE_FILE
+) -> int:
     """Write the .oxt archive and return the number of files added."""
     out.parent.mkdir(parents=True, exist_ok=True)
     count = 0
@@ -106,6 +109,9 @@ def build(src: Path, out: Path, info: dict = None) -> int:
                 count += 1
         if info is not None:
             zf.writestr(BUILDINFO_PATH, json.dumps(info, indent=2) + "\n")
+            count += 1
+        if license_file is not None and license_file.exists():
+            zf.write(license_file, "LICENSE")
             count += 1
     return count
 

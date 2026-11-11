@@ -1,73 +1,74 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE dlg:window PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "dialog.dtd">
 <!-- Tools → Options → Languages and Locales → Predictive Text.
-     Control ids are read by predictive/uno_glue.py (OPT_* constants). -->
+     Control ids are read by predictive/uno_glue.py (OPT_* constants).
+     Size: the visible page area of the Options dialog is about 355 x 337
+     dialog units (LibreOffice 25.2, measured on a screenshot); this page uses
+     340 x 324 to leave a margin for other fonts and screens. -->
 <dlg:window xmlns:dlg="http://openoffice.org/2000/dialog"
             xmlns:script="http://openoffice.org/2000/script"
-            dlg:id="OptionsPage" dlg:left="0" dlg:top="0" dlg:width="260" dlg:height="364"
+            dlg:id="OptionsPage" dlg:left="0" dlg:top="0" dlg:width="340" dlg:height="324"
             dlg:closeable="false" dlg:moveable="false" dlg:withtitlebar="false">
   <dlg:bulletinboard>
-    <dlg:fixedline dlg:id="HeaderCompletion" dlg:left="6" dlg:top="3" dlg:width="248" dlg:height="8"
+    <dlg:fixedline dlg:id="HeaderCompletion" dlg:left="6" dlg:top="3" dlg:width="328" dlg:height="8"
                    dlg:value="Word completion"/>
-    <dlg:checkbox dlg:id="Enabled" dlg:tab-index="0" dlg:left="12" dlg:top="16" dlg:width="242" dlg:height="10"
+    <dlg:checkbox dlg:id="Enabled" dlg:tab-index="0" dlg:left="12" dlg:top="16" dlg:width="320" dlg:height="10"
                   dlg:value="Suggest word completions while typing" dlg:checked="true"/>
-    <dlg:text dlg:id="LanguageLabel" dlg:left="12" dlg:top="34" dlg:width="140" dlg:height="10"
+    <dlg:text dlg:id="LanguageLabel" dlg:left="12" dlg:top="34" dlg:width="160" dlg:height="10"
               dlg:value="Dictionary language:"/>
-    <dlg:menulist dlg:id="Language" dlg:tab-index="1" dlg:left="155" dlg:top="32" dlg:width="70" dlg:height="12"
+    <dlg:menulist dlg:id="Language" dlg:tab-index="1" dlg:left="175" dlg:top="32" dlg:width="80" dlg:height="12"
                   dlg:spin="true"/>
-    <dlg:text dlg:id="MinPrefixLabel" dlg:left="12" dlg:top="52" dlg:width="140" dlg:height="10"
+    <dlg:text dlg:id="MinPrefixLabel" dlg:left="12" dlg:top="52" dlg:width="160" dlg:height="10"
               dlg:value="Letters typed before suggesting:"/>
-    <dlg:numericfield dlg:id="MinPrefix" dlg:tab-index="2" dlg:left="155" dlg:top="50" dlg:width="40" dlg:height="12"
+    <dlg:numericfield dlg:id="MinPrefix" dlg:tab-index="2" dlg:left="175" dlg:top="50" dlg:width="40" dlg:height="12"
                       dlg:decimal-accuracy="0" dlg:value-min="1" dlg:value-max="10" dlg:value="3"
                       dlg:spin="true" dlg:strict-format="true"/>
-    <dlg:text dlg:id="MinCompletionLabel" dlg:left="12" dlg:top="68" dlg:width="140" dlg:height="10"
+    <dlg:text dlg:id="MinCompletionLabel" dlg:left="12" dlg:top="68" dlg:width="160" dlg:height="10"
               dlg:value="Minimum letters a suggestion adds:"/>
-    <dlg:numericfield dlg:id="MinCompletion" dlg:tab-index="3" dlg:left="155" dlg:top="66" dlg:width="40" dlg:height="12"
+    <dlg:numericfield dlg:id="MinCompletion" dlg:tab-index="3" dlg:left="175" dlg:top="66" dlg:width="40" dlg:height="12"
                       dlg:decimal-accuracy="0" dlg:value-min="1" dlg:value-max="10" dlg:value="1"
                       dlg:spin="true" dlg:strict-format="true"/>
-    <dlg:fixedline dlg:id="HeaderDisplay" dlg:left="6" dlg:top="88" dlg:width="248" dlg:height="8"
+    <dlg:fixedline dlg:id="HeaderDisplay" dlg:left="6" dlg:top="88" dlg:width="328" dlg:height="8"
                    dlg:value="Suggestion list"/>
-    <dlg:text dlg:id="ListPositionLabel" dlg:left="12" dlg:top="103" dlg:width="140" dlg:height="10"
+    <dlg:text dlg:id="ListPositionLabel" dlg:left="12" dlg:top="103" dlg:width="160" dlg:height="10"
               dlg:value="Show the list:"/>
-    <dlg:menulist dlg:id="ListPosition" dlg:tab-index="4" dlg:left="155" dlg:top="101" dlg:width="95" dlg:height="12"
+    <dlg:menulist dlg:id="ListPosition" dlg:tab-index="4" dlg:left="175" dlg:top="101" dlg:width="110" dlg:height="12"
                   dlg:spin="true"/>
-    <dlg:text dlg:id="MaxSuggestionsLabel" dlg:left="12" dlg:top="121" dlg:width="140" dlg:height="10"
+    <dlg:text dlg:id="MaxSuggestionsLabel" dlg:left="12" dlg:top="121" dlg:width="160" dlg:height="10"
               dlg:value="Words shown at once (Alt+1 ... Alt+9):"/>
-    <dlg:numericfield dlg:id="MaxSuggestions" dlg:tab-index="5" dlg:left="155" dlg:top="119" dlg:width="40" dlg:height="12"
+    <dlg:numericfield dlg:id="MaxSuggestions" dlg:tab-index="5" dlg:left="175" dlg:top="119" dlg:width="40" dlg:height="12"
                       dlg:decimal-accuracy="0" dlg:value-min="1" dlg:value-max="9" dlg:value="6"
                       dlg:spin="true" dlg:strict-format="true"/>
-    <dlg:text dlg:id="MaxCandidatesLabel" dlg:left="12" dlg:top="137" dlg:width="140" dlg:height="10"
+    <dlg:text dlg:id="MaxCandidatesLabel" dlg:left="12" dlg:top="137" dlg:width="160" dlg:height="10"
               dlg:value="Words reachable by scrolling:"/>
-    <dlg:numericfield dlg:id="MaxCandidates" dlg:tab-index="6" dlg:left="155" dlg:top="135" dlg:width="40" dlg:height="12"
+    <dlg:numericfield dlg:id="MaxCandidates" dlg:tab-index="6" dlg:left="175" dlg:top="135" dlg:width="40" dlg:height="12"
                       dlg:decimal-accuracy="0" dlg:value-min="1" dlg:value-max="100" dlg:value="30"
                       dlg:spin="true" dlg:strict-format="true"/>
-    <dlg:checkbox dlg:id="Inline" dlg:tab-index="7" dlg:left="12" dlg:top="153" dlg:width="242" dlg:height="10"
+    <dlg:checkbox dlg:id="Inline" dlg:tab-index="7" dlg:left="12" dlg:top="153" dlg:width="320" dlg:height="10"
                   dlg:value="Also show the highlighted word in the text (selected letters)" dlg:checked="false"/>
-    <dlg:text dlg:id="InlineNote" dlg:left="24" dlg:top="165" dlg:width="230" dlg:height="18" dlg:multiline="true"
+    <dlg:text dlg:id="InlineNote" dlg:left="24" dlg:top="165" dlg:width="308" dlg:height="18" dlg:multiline="true"
               dlg:value="Off by default because it slows typing: LibreOffice needs about 40 ms for each change to the text, the list alone about 5 ms per key."/>
-    <dlg:fixedline dlg:id="HeaderContext" dlg:left="6" dlg:top="189" dlg:width="248" dlg:height="8"
+    <dlg:fixedline dlg:id="HeaderContext" dlg:left="6" dlg:top="189" dlg:width="328" dlg:height="8"
                    dlg:value="Context prediction (n-grams)"/>
-    <dlg:checkbox dlg:id="Context" dlg:tab-index="8" dlg:left="12" dlg:top="202" dlg:width="242" dlg:height="10"
+    <dlg:checkbox dlg:id="Context" dlg:tab-index="8" dlg:left="12" dlg:top="202" dlg:width="320" dlg:height="10"
                   dlg:value="Rank completions by the previous words" dlg:checked="false"/>
-    <dlg:checkbox dlg:id="NextWord" dlg:tab-index="9" dlg:left="12" dlg:top="216" dlg:width="242" dlg:height="10"
+    <dlg:checkbox dlg:id="NextWord" dlg:tab-index="9" dlg:left="12" dlg:top="216" dlg:width="320" dlg:height="10"
                   dlg:value="Predict the next word after a space" dlg:checked="false"/>
-    <dlg:text dlg:id="AcceptCompletionLabel" dlg:left="12" dlg:top="233" dlg:width="140" dlg:height="10"
+    <dlg:text dlg:id="AcceptCompletionLabel" dlg:left="12" dlg:top="233" dlg:width="160" dlg:height="10"
               dlg:value="Accept a completion with:"/>
-    <dlg:menulist dlg:id="AcceptCompletion" dlg:tab-index="10" dlg:left="155" dlg:top="231" dlg:width="95" dlg:height="12"
+    <dlg:menulist dlg:id="AcceptCompletion" dlg:tab-index="10" dlg:left="175" dlg:top="231" dlg:width="110" dlg:height="12"
                   dlg:spin="true"/>
-    <dlg:text dlg:id="AcceptNextWordLabel" dlg:left="12" dlg:top="249" dlg:width="140" dlg:height="10"
+    <dlg:text dlg:id="AcceptNextWordLabel" dlg:left="12" dlg:top="249" dlg:width="160" dlg:height="10"
               dlg:value="Accept a next-word prediction with:"/>
-    <dlg:menulist dlg:id="AcceptNextWord" dlg:tab-index="11" dlg:left="155" dlg:top="247" dlg:width="95" dlg:height="12"
+    <dlg:menulist dlg:id="AcceptNextWord" dlg:tab-index="11" dlg:left="175" dlg:top="247" dlg:width="110" dlg:height="12"
                   dlg:spin="true"/>
-    <dlg:text dlg:id="ModelStatus" dlg:left="12" dlg:top="265" dlg:width="242" dlg:height="18" dlg:multiline="true"
+    <dlg:text dlg:id="ModelStatus" dlg:left="12" dlg:top="265" dlg:width="320" dlg:height="18" dlg:multiline="true"
               dlg:value=""/>
-    <dlg:fixedline dlg:id="HeaderTroubleshooting" dlg:left="6" dlg:top="285" dlg:width="248" dlg:height="8"
-                   dlg:value="Troubleshooting"/>
-    <dlg:checkbox dlg:id="Debug" dlg:tab-index="12" dlg:left="12" dlg:top="298" dlg:width="242" dlg:height="10"
-                  dlg:value="Log keystrokes and suggestions (log.txt contains what you type)" dlg:checked="false"/>
-    <dlg:text dlg:id="Note" dlg:left="12" dlg:top="318" dlg:width="242" dlg:height="30" dlg:multiline="true"
-              dlg:value="Keys: Tab/Enter accept, Up/Down and Page Up/Down scroll, Alt+number picks, Esc closes. Tip: turn off Tools ▸ AutoCorrect Options ▸ Word Completion, otherwise Writer and Predictive Text both complete words."/>
-    <dlg:text dlg:id="VersionInfo" dlg:left="12" dlg:top="350" dlg:width="242" dlg:height="10"
+    <dlg:text dlg:id="Note" dlg:left="12" dlg:top="288" dlg:width="320" dlg:height="10"
+              dlg:value="Tip: turn off Tools ▸ AutoCorrect Options ▸ Word Completion to avoid double completions."/>
+    <dlg:text dlg:id="VersionInfo" dlg:left="12" dlg:top="302" dlg:width="320" dlg:height="10"
               dlg:value=""/>
+    <dlg:text dlg:id="LicenceInfo" dlg:left="12" dlg:top="313" dlg:width="320" dlg:height="10"
+              dlg:value="© 2026 Ludovic Mercier · Mozilla Public License 2.0 · data: MPL 2.0, CC BY-SA 4.0 (see NOTICE.md)"/>
   </dlg:bulletinboard>
 </dlg:window>

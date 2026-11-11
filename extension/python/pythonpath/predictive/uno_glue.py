@@ -839,7 +839,7 @@ OPT_ENABLED = "Enabled"
 OPT_LANGUAGE = "Language"
 OPT_MIN_PREFIX = "MinPrefix"
 OPT_MIN_COMPLETION = "MinCompletion"
-OPT_DEBUG = "Debug"
+# Logging ("debug" setting) is not on the page; set it in settings.json.
 OPT_LIST_POSITION = "ListPosition"
 OPT_MAX_SUGGESTIONS = "MaxSuggestions"
 OPT_MAX_CANDIDATES = "MaxCandidates"
@@ -849,6 +849,7 @@ OPT_ACCEPT_COMPLETION = "AcceptCompletion"
 OPT_ACCEPT_NEXT_WORD = "AcceptNextWord"
 OPT_MODEL_STATUS = "ModelStatus"
 OPT_VERSION_INFO = "VersionInfo"
+OPT_LICENCE_INFO = "LicenceInfo"
 OPT_INLINE = "Inline"
 # Entries of the ListPosition list, in the order of popup_layout.POSITIONS.
 LIST_POSITION_LABELS = (
@@ -909,7 +910,6 @@ def _model(window: Any, name: str) -> Any:
 def _load_options_page(app: App, window: Any) -> None:
     settings = app.settings
     _model(window, OPT_ENABLED).State = 1 if settings["enabled"] else 0
-    _model(window, OPT_DEBUG).State = 1 if settings["debug"] else 0
     _model(window, OPT_MIN_PREFIX).Value = float(settings["min_prefix"])
     _model(window, OPT_MIN_COMPLETION).Value = float(settings["min_completion"])
     _model(window, OPT_MAX_SUGGESTIONS).Value = float(settings["max_suggestions"])
@@ -934,6 +934,7 @@ def _load_options_page(app: App, window: Any) -> None:
     version = _model(window, OPT_VERSION_INFO)
     version.Label = buildinfo.describe()
     version.TextColor = 0x808080
+    _model(window, OPT_LICENCE_INFO).TextColor = 0x808080
     languages = app.available_languages()
     current = str(settings["language"])
     if current not in languages:
@@ -949,7 +950,6 @@ def _save_options_page(app: App, window: Any) -> None:
     selected = list(language.SelectedItems)
     changes = {
         "enabled": _model(window, OPT_ENABLED).State == 1,
-        "debug": _model(window, OPT_DEBUG).State == 1,
         "min_prefix": int(round(_model(window, OPT_MIN_PREFIX).Value)),
         "min_completion": int(round(_model(window, OPT_MIN_COMPLETION).Value)),
         "max_suggestions": int(round(_model(window, OPT_MAX_SUGGESTIONS).Value)),

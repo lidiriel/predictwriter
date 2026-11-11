@@ -1,10 +1,14 @@
-# Third-party data and code in Predictive Writer
+# Licences in Predictive Writer
 
-## Code
+## Predictive Writer itself
+- Copyright (c) 2026 Ludovic Mercier — Mozilla Public License 2.0, see `LICENSE`
+  (https://mozilla.org/MPL/2.0/).
+
+## Third-party code
 - **pressagio 0.1.6** (`python/pythonpath/pressagio/`), Peter Bouda —
   Apache License 2.0, see `python/pythonpath/pressagio/LICENSE` and `VENDORED.md`.
 
-## Data (`data/`)
+## Third-party data (`data/`)
 - **French word forms and grammar tags** (`fr_FR.words.tsv`): generated from the
   Hunspell dictionary "Dictionnaires Français Dicollecte" (Grammalecte,
   https://grammalecte.net) — Mozilla Public License 2.0.
