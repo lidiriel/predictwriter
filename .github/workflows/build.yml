@@ -1,0 +1,90 @@
+# Test, lint and package the LibreOffice extension.
+#
+# - Every push and pull request: tests (Python 3.8 and 3.13), lint, and the
+#   .oxt as a downloadable artifact of the run ("Actions" tab).
+# - A tag "v<version>" (e.g. v1.0, matching extension/description.xml):
+#   also creates a GitHub Release with the .oxt attached.
+name: Build extension
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest supported Python (CLAUDE.md: 3.8+); not on ubuntu-24.04.
+          - python: "3.8"
+            os: ubuntu-22.04
+          # Python of LibreOffice 25.2 on Debian 13.
+          - python: "3.13"
+            os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install pytest
+      - run: python -m pytest tests/ -q
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install black==26.10.1 pyflakes==4.1.0
+      # pyproject.toml excludes the vendored pressagio from black.
+      - run: black --check extension tools tests
+      - run: pyflakes extension/python/pythonpath/predictive extension/python/main.py tools tests
+
+  build:
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # to create a release on tags
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Read the version
+        id: version
+        run: |
+          version=$(python -c "import sys; sys.path.insert(0, 'tools'); import build_oxt; print(build_oxt.check_version(build_oxt.ROOT / 'extension'))")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Version: $version"
+      - name: Check that the tag matches the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          if [ "$GITHUB_REF_NAME" != "v${{ steps.version.outputs.version }}" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match version ${{ steps.version.outputs.version }} in extension/description.xml"
+            exit 1
+          fi
+      - name: Build the .oxt
+        run: python tools/build_oxt.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: predictive-writer-${{ steps.version.outputs.version }}
+          path: dist/*.oxt
+          if-no-files-found: error
+      - name: Create the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.oxt \
+            --title "Predictive Writer ${{ steps.version.outputs.version }}" \
+            --notes "Install: close LibreOffice, then \`unopkg add -f predictive-writer-${{ steps.version.outputs.version }}.oxt\` (or Tools > Extension Manager > Add). See the README for prerequisites (python3-uno on Debian/Ubuntu)."
