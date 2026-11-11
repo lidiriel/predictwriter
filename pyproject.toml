@@ -1,0 +1,6 @@
+[tool.black]
+# Vendored third-party code must stay byte-for-byte identical to upstream.
+extend-exclude = "extension/python/pythonpath/pressagio/"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
