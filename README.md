@@ -4,7 +4,7 @@ Predictive word completion for LibreOffice Writer, backed by Hunspell dictionari
 To install it, see [Installation](#installation).
 
 
-
+Writing a letter by Anatole France: 
 https://github.com/user-attachments/assets/9496e424-ec04-4483-b57f-5fda7c5552b1
 
 
