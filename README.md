@@ -3,6 +3,12 @@
 Predictive word completion for LibreOffice Writer, backed by Hunspell dictionaries.
 To install it, see [Installation](#installation).
 
+
+
+https://github.com/user-attachments/assets/9496e424-ec04-4483-b57f-5fda7c5552b1
+
+
+
 ## Status: suggestion list + context prediction + French grammar
 
 While you type, a numbered list of the most likely words appears under the cursor:
