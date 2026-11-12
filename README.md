@@ -1,7 +1,7 @@
 # Predictive Writer
 
 Predictive word completion for LibreOffice Writer, backed by Hunspell dictionaries.
-To install it, see [Installation](#installation).
+To build it, see [Build](#build); to install it, see [Installation](#installation).
 
 
 Writing a letter by Anatole France:
@@ -151,9 +151,75 @@ attribution recorded in its `_meta` table (source, dump date, licence).
 - **Dead keys / IME:** a character composed with a dead key (`^` + `e`) may not trigger
   a suggestion until the next key.
 
+## Build
+
+Building the extension only needs **Python 3.8+** (and `git`, for the build
+information); LibreOffice is not needed. The word lists in `extension/data/` are
+already generated and committed.
+
+```bash
+python3 tools/build_oxt.py                     # -> dist/predictive-writer-<version>.oxt
+```
+
+To try a build on your own machine (see [Installation](#installation)):
+
+```bash
+unopkg add -f dist/predictive-writer-1.0.oxt   # close LibreOffice first
+soffice --writer                               # start from a terminal to see errors
+```
+
+### Version
+
+The version (major.minor) is set in two places that must agree, checked by
+`build_oxt.py` and by the tests: `extension/description.xml` (`<version value="1.0"/>`,
+shown by LibreOffice) and `extension/python/pythonpath/predictive/__init__.py`
+(`__version__`). Installing a newer `.oxt` with `unopkg add -f` replaces the old one.
+
+`build_oxt.py` also stores the last git commit (short hash and date, and whether there
+were uncommitted changes) inside the `.oxt`; the bottom of the Options page shows it,
+e.g. *Predictive Writer 1.0 — commit 04ab2b9 of 2026-11-11 20:35*.
+
+### Automatic build on GitHub
+
+The workflow [.github/workflows/build.yml](.github/workflows/build.yml) runs on every
+push and pull request: tests (Python 3.8 and 3.13), lint (`black`, `pyflakes`), then
+the build. The `.oxt` can be downloaded from the run's page (**Actions** tab,
+*Artifacts*).
+
+To publish a release, push a tag `v<version>` matching `description.xml`; the workflow
+checks it and creates a GitHub Release with the `.oxt` attached:
+
+```bash
+git tag v1.0
+git push origin v1.0
+```
+
+### Word lists
+
+Only needed to regenerate `extension/data/`:
+
+```bash
+python3 tools/build_wordlist.py --lang en_US
+python3 tools/build_wordlist.py --lang fr_FR \
+    --freq sources/frequencywords/fr_full.txt \
+    --elision-model ~/.config/libreoffice/4/user/predictive-writer/ngrams_fr_FR.sqlite
+```
+
+`tools/build_wordlist.py` expands `/usr/share/hunspell/<lang>.dic/.aff` into all word
+forms (conjugations, plurals...) with its own affix expander (no extra dependency),
+keeping Hunspell's grammar tags (person, infinitive, participle) and accepted
+elisions. `--freq` takes a `word count` list (here *FrequencyWords*, OpenSubtitles);
+`--elision-model` scores elided pairs (`l'année`) with the n-gram model and writes
+`fr_FR.elisions.tsv`.
+
+Third-party data and their licences (MPL 2.0, CC BY-SA 4.0...) are listed in
+[extension/NOTICE.md](extension/NOTICE.md).
+
 ## Installation
 
-On any computer, from the packaged extension `dist/predictive-writer-<version>.oxt`
+On any computer, from the packaged extension `predictive-writer-<version>.oxt`, built
+with [Build](#build) or downloaded from the
+[Releases page](https://github.com/lidiriel/predictwriter/releases)
 (about 2 MB; current version: **1.0**, shown in **Tools → Extension Manager**).
 
 ### Prerequisites
@@ -221,45 +287,6 @@ unopkg remove net.scilink.predictivewriter
 ```
 
 The `predictive-writer` folder of the profile (settings, log, model) can then be deleted.
-
-## Building from source
-
-```bash
-python3 tools/build_oxt.py                     # -> dist/predictive-writer-<version>.oxt
-                                               # (data/ is already generated, see below)
-unopkg add -f dist/predictive-writer-1.0.oxt   # close LibreOffice first
-soffice --writer                               # start from a terminal to see errors
-```
-
-The version (major.minor) is set in two places that must agree, checked by
-`build_oxt.py` and by the tests: `extension/description.xml` (`<version value="1.0"/>`,
-shown by LibreOffice) and `extension/python/pythonpath/predictive/__init__.py`
-(`__version__`). Installing a newer `.oxt` with `unopkg add -f` replaces the old one.
-
-`build_oxt.py` also stores the last git commit (short hash and date, and whether there
-were uncommitted changes) inside the `.oxt`; the bottom of the Options page shows it,
-e.g. *Predictive Writer 1.0 — commit 04ab2b9 of 2026-11-11 20:35*.
-
-### Word lists
-
-Only needed to regenerate `extension/data/`:
-
-```bash
-python3 tools/build_wordlist.py --lang en_US
-python3 tools/build_wordlist.py --lang fr_FR \
-    --freq sources/frequencywords/fr_full.txt \
-    --elision-model ~/.config/libreoffice/4/user/predictive-writer/ngrams_fr_FR.sqlite
-```
-
-`tools/build_wordlist.py` expands `/usr/share/hunspell/<lang>.dic/.aff` into all word
-forms (conjugations, plurals...) with its own affix expander (no extra dependency),
-keeping Hunspell's grammar tags (person, infinitive, participle) and accepted
-elisions. `--freq` takes a `word count` list (here *FrequencyWords*, OpenSubtitles);
-`--elision-model` scores elided pairs (`l'année`) with the n-gram model and writes
-`fr_FR.elisions.tsv`.
-
-Third-party data and their licences (MPL 2.0, CC BY-SA 4.0...) are listed in
-[extension/NOTICE.md](extension/NOTICE.md).
 
 ## Tests
 
