@@ -89,7 +89,7 @@ The bottom of the page shows the version and the git commit the extension was bu
 | Accept a next-word prediction with: same choices | Tab only (Enter keeps making a new paragraph) |
 
 Changes apply as soon as you press OK or Apply, without restarting. Automatic
-language detection from the text comes in Phase 2.
+language detection from the text comes in the futur.
 
 The settings are stored in `~/.config/libreoffice/4/user/predictive-writer/settings.json`.
 If you edit that file by hand, restart LibreOffice.
