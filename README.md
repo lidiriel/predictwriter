@@ -15,28 +15,30 @@ patrie, on meurt pour des industriels », published in* L'Humanité *on 18 July 
 
 ## Status: suggestion list + context prediction + French grammar
 
-While you type, a numbered list of the most likely words appears under the cursor:
+While you type, a list of the most likely words appears under the cursor:
 6 at a time, and you can scroll through up to 30 (both adjustable). Optionally, the
 highlighted word is also shown in the text as selected letters: `prédi[re]` (off by
 default, see below).
 
 ```
 La prédi|
-     ┌─────────────┐
-     │ 1 prédire   │  ← highlighted
-     │ 2 prédicat  │
-     │ 3 prédicant │
-     │ …           │
-     │   1–6 / 30  │  ← shown when there are more words than fit
-     └─────────────┘
+   prédire       ← highlighted
+   prédiction
+   prédicat
+   …
+     1–6 / 30    ← shown when there are more words than fit
 ```
+
+The list uses the document's font at the current zoom and starts exactly under the
+typed word, so the typed letters and the suggestions line up column by column. Numbers
+(for Alt+1 … Alt+9) can be shown in a grey column left of the words (see Settings).
 
 | Key | Effect while suggestions are shown |
 | --- | --- |
 | Tab / Enter | accept the highlighted word (the cursor jumps after it); configurable, see Settings |
 | ↑ / ↓ | move the highlight; past the last visible word the list scrolls (wraps around at the end) |
 | Page Up / Page Down | move one page (stops at the first / last word) |
-| Alt+1 … Alt+9 | pick the word with that number in the visible part of the list |
+| Alt+1 … Alt+9 | pick the 1st … 9th word of the visible part of the list (numbers shown or not, see Settings) |
 | click on a word | pick it |
 | Esc | close the list (and remove the selected letters) |
 | Backspace / Delete | close the list; with letters shown in the text, remove only them |
@@ -82,6 +84,7 @@ The bottom of the page shows the version and the git commit the extension was bu
 | Show the list: under the cursor, bar at the bottom, bar at the top, don't show | under the cursor |
 | Words shown at once (1–9) | 6 |
 | Words reachable by scrolling (1–100) | 30 |
+| Numbers in the list under the cursor: hidden, left of the words | hidden |
 | Also show the highlighted word in the text (selected letters) | off (slower, see below) |
 | Rank completions by the previous words (n-gram model) | off |
 | Predict the next word after a space (n-gram model) | off |
@@ -164,20 +167,20 @@ python3 tools/build_oxt.py                     # -> dist/predictive-writer-<vers
 To try a build on your own machine (see [Installation](#installation)):
 
 ```bash
-unopkg add -f dist/predictive-writer-1.0.oxt   # close LibreOffice first
+unopkg add -f dist/predictive-writer-1.1.oxt   # close LibreOffice first
 soffice --writer                               # start from a terminal to see errors
 ```
 
 ### Version
 
 The version (major.minor) is set in two places that must agree, checked by
-`build_oxt.py` and by the tests: `extension/description.xml` (`<version value="1.0"/>`,
+`build_oxt.py` and by the tests: `extension/description.xml` (`<version value="1.1"/>`,
 shown by LibreOffice) and `extension/python/pythonpath/predictive/__init__.py`
 (`__version__`). Installing a newer `.oxt` with `unopkg add -f` replaces the old one.
 
 `build_oxt.py` also stores the last git commit (short hash and date, and whether there
 were uncommitted changes) inside the `.oxt`; the bottom of the Options page shows it,
-e.g. *Predictive Writer 1.0 — commit 04ab2b9 of 2026-11-11 20:35*.
+e.g. *Predictive Writer 1.1 — commit 92af856 of 2026-11-12 07:35*.
 
 ### Automatic build on GitHub
 
@@ -190,8 +193,8 @@ To publish a release, push a tag `v<version>` matching `description.xml`; the wo
 checks it and creates a GitHub Release with the `.oxt` attached:
 
 ```bash
-git tag v1.0
-git push origin v1.0
+git tag v1.1
+git push origin v1.1
 ```
 
 ### Word lists
@@ -220,7 +223,7 @@ Third-party data and their licences (MPL 2.0, CC BY-SA 4.0...) are listed in
 On any computer, from the packaged extension `predictive-writer-<version>.oxt`, built
 with [Build](#build) or downloaded from the
 [Releases page](https://github.com/lidiriel/predictwriter/releases)
-(about 2 MB; current version: **1.0**, shown in **Tools → Extension Manager**).
+(about 2 MB; current version: **1.1**, shown in **Tools → Extension Manager**).
 
 ### Prerequisites
 
@@ -234,10 +237,10 @@ and pressagio are inside the `.oxt` — no Hunspell, no `pip` package.
 
 ### Steps
 
-1. Copy `predictive-writer-1.0.oxt` to the computer.
+1. Copy `predictive-writer-1.1.oxt` to the computer.
 2. Close LibreOffice, then install the extension:
    ```bash
-   unopkg add predictive-writer-1.0.oxt
+   unopkg add predictive-writer-1.1.oxt
    ```
    or, in LibreOffice, **Tools → Extension Manager → Add…**
 3. Start Writer and turn off the built-in completion: **Tools → AutoCorrect Options →
@@ -276,7 +279,7 @@ space** in the Options page (restart LibreOffice if Writer was already open).
 
 `log.txt`, in the same `predictive-writer` folder, should contain after opening Writer:
 
-- `Predictive Writer 1.0 — commit … starting` (the version and the commit it was built from)
+- `Predictive Writer 1.1 — commit … starting` (the version and the commit it was built from)
 - `loaded fr_FR: 449932 words` a few seconds later
 - `context prediction: using …` if the model is in place and the options are ticked
 

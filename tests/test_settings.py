@@ -31,3 +31,11 @@ def test_corrupt_file_uses_defaults(tmp_path):
     path = tmp_path / "settings.json"
     path.write_text("{not json", encoding="utf-8")
     assert Settings(str(path)).values == DEFAULTS
+
+
+def test_list_numbers_default_and_values(tmp_path):
+    s = Settings(str(tmp_path / "settings.json"))
+    assert s["list_numbers"] == "hide"  # numbers hidden by default
+    s["list_numbers"] = "left"
+    s.save()
+    assert Settings(str(tmp_path / "settings.json"))["list_numbers"] == "left"

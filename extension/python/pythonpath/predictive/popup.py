@@ -12,6 +12,12 @@ does not name the edit window, so we look among the component window's
 sub-windows (``XVclContainer``) for the one whose bounds match the text area
 reported by the accessibility API.
 
+Under the cursor, the suggestions are written in the document's font (at the
+current zoom) and start exactly below the first letter of the typed word, so
+the typed letters and the suggestions line up column by column. Numbers
+(Alt+1...Alt+9) are hidden or shown in a grey gutter left of the words. The
+top/bottom bars keep the interface font and numbers.
+
 The cursor's pixel position is not available from the text API (the
 controller exposes no visible-area/scroll information), so we use the
 accessibility API, which screen readers rely on: the accessible paragraph
@@ -19,7 +25,7 @@ holding the caret gives character bounds in pixels.
 """
 
 import logging
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, List, NamedTuple, Optional, Tuple
 
 import uno
 import unohelper
@@ -41,6 +47,13 @@ COLOR_SELECTED_TEXT = 0xFFFFFF
 COLOR_STATUS = 0x808080
 PAD_X = 6
 PAD_Y = 2
+GUTTER_PAD = 4  # pixels each side of the numbers in the left gutter
+# Pixels between a FixedText's left edge and the start of its text. Measured
+# on screenshots (LibreOffice 25.2, gtk3, 100% and 140% zoom): the list text
+# started 2-3 px right of the typed word with 0 (3 px on "l", 2 px on "p").
+TEXT_INSET = 2
+NUMBERS_HIDE = "hide"
+NUMBERS_LEFT = "left"
 MAX_NODES = 2000  # safety limit when searching the accessibility tree
 
 
@@ -57,11 +70,13 @@ class CaretLocator:
         self._doc_view: Any = None
         self._document_role = _role("DOCUMENT_TEXT")
 
-    def locate(self) -> Optional[Tuple[Rect, Rect]]:
-        """Return ``(caret, text_area)`` or None if the cursor is not found.
+    def locate(self, word_length: int = 0) -> Optional[Tuple[Rect, Rect, int]]:
+        """Return ``(caret, text_area, word_x)`` or None if not found.
 
         ``caret`` is the cursor line (x of the cursor, top, line height);
-        ``text_area`` the visible document area.
+        ``text_area`` the visible document area; ``word_x`` the x of the first
+        letter of the ``word_length`` characters left of the cursor (the word
+        being typed), or the cursor's x when ``word_length`` is 0.
         """
         root = self._window.getAccessibleContext()
         origin = root.getLocationOnScreen()
@@ -90,7 +105,11 @@ class CaretLocator:
         caret = Rect(
             para_loc.X - origin.X + x, para_loc.Y - origin.Y + y, 0, max(height, 1)
         )
-        return caret, area
+        word_x = caret.x
+        start = caret_index - word_length
+        if word_length > 0 and 0 <= start < paragraph.getCharacterCount():
+            word_x = para_loc.X - origin.X + paragraph.getCharacterBounds(start).X
+        return caret, area, word_x
 
     def _document_view(self, root: Any) -> Any:
         if self._doc_view is not None:
@@ -141,6 +160,15 @@ def _descendants(root: Any):
             queue.append(child)
 
 
+class ListFont(NamedTuple):
+    """Font of the suggestions under the cursor (the document's, zoomed)."""
+
+    name: str
+    height: float  # points, already multiplied by the zoom
+    weight: float  # com.sun.star.awt.FontWeight (100 normal, 150 bold)
+    italic: bool
+
+
 class _ClickListener(unohelper.Base, XMouseListener):
     def __init__(self, index: int, on_pick: Callable[[int], None]) -> None:
         self._index = index
@@ -177,7 +205,8 @@ class SuggestionPopup:
         self._parent = component_window
         self._on_pick = on_pick  # called with an index into the full list
         self._box: Any = None
-        self._labels: List[Any] = []
+        self._labels: List[Any] = []  # one word label per row
+        self._numbers: List[Any] = []  # one number label per row (left gutter)
         self._status: Any = None  # "7-12 / 30" line, shown when scrollable
         self._visible = False
         self.locator = CaretLocator(component_window)
@@ -191,7 +220,10 @@ class SuggestionPopup:
         self._position = ""
         self._caret = Rect(0, 0, 0, 0)
         self._area = Rect(0, 0, 0, 0)
+        self._word_x = 0
         self._column_width = 0
+        self._numbers_mode = NUMBERS_HIDE
+        self._font: Optional[ListFont] = None
 
     @property
     def visible(self) -> bool:
@@ -231,7 +263,8 @@ class SuggestionPopup:
         box.setVisible(False)
         box.createPeer(toolkit, self._parent)
         middle = uno.Enum("com.sun.star.style.VerticalAlignment", "MIDDLE")
-        for i in range(MAX_ITEMS + 1):  # the last one is the status line
+
+        def new_label(name: str) -> Any:
             label_model = smgr.createInstanceWithContext(
                 "com.sun.star.awt.UnoControlFixedTextModel", self._ctx
             )
@@ -241,37 +274,66 @@ class SuggestionPopup:
                 "com.sun.star.awt.UnoControlFixedText", self._ctx
             )
             label.setModel(label_model)
-            box.addControl("item%d" % i, label)
+            box.addControl(name, label)
             label.setVisible(False)
-            if i < MAX_ITEMS:
-                label.addMouseListener(_ClickListener(i, self._clicked))
-                self._labels.append(label)
-            else:
-                label_model.TextColor = COLOR_STATUS
-                # Left-aligned: right-aligned text had its last glyph clipped.
-                label_model.Align = 0
-                self._status = label
+            return label
+
+        for i in range(MAX_ITEMS):
+            number = new_label("number%d" % i)
+            number.getModel().TextColor = COLOR_STATUS
+            number.getModel().Align = 0
+            number.addMouseListener(_ClickListener(i, self._clicked))
+            self._numbers.append(number)
+            label = new_label("item%d" % i)
+            label.addMouseListener(_ClickListener(i, self._clicked))
+            self._labels.append(label)
+        self._status = new_label("status")
+        self._status.getModel().TextColor = COLOR_STATUS
+        # Left-aligned: right-aligned text had its last glyph clipped.
+        self._status.getModel().Align = 0
         self._box = box
 
     def _clicked(self, row: int) -> None:
         self._on_pick(self._top + row)
 
-    def show(self, words: List[str], selected: int, position: str, rows: int) -> bool:
+    def show(
+        self,
+        words: List[str],
+        selected: int,
+        position: str,
+        rows: int,
+        typed: str = "",
+        font: Optional[ListFont] = None,
+        numbers: str = NUMBERS_HIDE,
+    ) -> bool:
         """Show ``words`` with ``selected`` highlighted, ``rows`` at a time.
+
+        Args:
+            typed: The word fragment left of the cursor; under the cursor the
+                suggestions start below its first letter.
+            font: Document font for the list under the cursor (None: interface
+                font).
+            numbers: ``"hide"`` or ``"left"`` (gutter left of the words).
 
         Returns False if the cursor could not be located (list not shown).
         """
-        located = self.locator.locate()
+        located = self.locator.locate(len(typed))
         if located is None:
             self.hide()
             return False
-        caret, area = located
+        caret, area, word_x = located
         if self._box is None:
             self._create(area)
         # Coordinates relative to the list's parent window.
         ox, oy = self._origin
         self._caret = Rect(caret.x - ox, caret.y - oy, caret.width, caret.height)
         self._area = Rect(area.x - ox, area.y - oy, area.width, area.height)
+        self._word_x = word_x - ox
+        self._numbers_mode = (
+            numbers if numbers in (NUMBERS_HIDE, NUMBERS_LEFT) else NUMBERS_HIDE
+        )
+        self._font = font if is_vertical(position) else None
+        self._apply_font()
         self._words = list(words)
         self._rows = max(1, min(rows, MAX_ITEMS))
         self._position = position
@@ -280,10 +342,13 @@ class SuggestionPopup:
         # Fixed column width for the whole list (so it does not jump while
         # scrolling): measured on the longest word.
         longest = max(self._words, key=len) if self._words else ""
-        self._column_width = max(
-            self._measure("%d  %s" % (self._rows, longest)),
-            self._measure(self._status_text()) if self._scrollable() else 0,
-        )
+        if is_vertical(position):
+            self._column_width = max(
+                self._measure_word(longest),
+                self._measure(self._status_text()) if self._scrollable() else 0,
+            )
+        else:
+            self._column_width = self._measure("%d  %s" % (self._rows, longest))
         self.select(selected)
         if not self._visible:
             self._box.setVisible(True)
@@ -312,13 +377,109 @@ class SuggestionPopup:
         return "%d\u2013%d / %d" % (self._top + 1, last, len(self._words))
 
     def _measure(self, text: str) -> int:
-        """Preferred pixel width of ``text`` in a list row (padding included)."""
+        """Preferred pixel width of ``text`` in the interface font (with padding)."""
         probe = self._status
         probe.getModel().Label = text
         return probe.getPreferredSize().Width + 2 * PAD_X
 
+    def _measure_word(self, word: str) -> int:
+        """Pixel width of ``word`` in the list's word font (right padding only)."""
+        probe = self._labels[0]
+        model = probe.getModel()
+        saved = model.Label
+        model.Label = word
+        width = probe.getPreferredSize().Width + TEXT_INSET + PAD_X
+        model.Label = saved
+        return width
+
+    def _apply_font(self) -> None:
+        """Document font on the word labels (or back to the interface font)."""
+        font = self._font
+        descriptor = uno.createUnoStruct("com.sun.star.awt.FontDescriptor")
+        if font is not None:
+            descriptor.Name = font.name
+            descriptor.Height = font.height
+            descriptor.Weight = font.weight
+            descriptor.Slant = uno.Enum(
+                "com.sun.star.awt.FontSlant", "ITALIC" if font.italic else "NONE"
+            )
+        for label in self._labels:
+            label.getModel().FontDescriptor = descriptor
+
+    def _gutter_width(self) -> int:
+        """Width of the number column left of the words (0 when hidden)."""
+        if self._numbers_mode != NUMBERS_LEFT:
+            return 0
+        probe = self._numbers[0]
+        probe.getModel().Label = str(self._rows)
+        return probe.getPreferredSize().Width + 2 * GUTTER_PAD
+
     def _layout(self) -> None:
+        if is_vertical(self._position):
+            self._layout_column()
+        else:
+            self._layout_bar()
+
+    def _layout_column(self) -> None:
+        """Under the cursor: words aligned below the typed word, optional gutter."""
         count = self.visible_count
+        if count == 0:
+            return
+        gutter = self._gutter_width()
+        row_h = 0
+        for row in range(MAX_ITEMS):
+            label, number = self._labels[row], self._numbers[row]
+            shown = row < count
+            label.setVisible(shown)
+            number.setVisible(shown and gutter > 0)
+            if not shown:
+                continue
+            index = self._top + row
+            model = label.getModel()
+            model.Label = self._words[index]
+            selected = index == self._selected
+            background = COLOR_SELECTED_BACKGROUND if selected else COLOR_BACKGROUND
+            model.BackgroundColor = background
+            model.TextColor = COLOR_SELECTED_TEXT if selected else COLOR_TEXT
+            if gutter:
+                number.getModel().Label = str(row + 1)
+                number.getModel().BackgroundColor = background
+                number.getModel().TextColor = (
+                    COLOR_SELECTED_TEXT if selected else COLOR_STATUS
+                )
+            row_h = max(row_h, label.getPreferredSize().Height + 2 * PAD_Y)
+        status = self._status_text() if self._scrollable() else ""
+        self._status.getModel().Label = status
+        self._status.setVisible(bool(status))
+        col_w = self._column_width
+        for row in range(count):
+            y = 1 + row * row_h
+            if gutter:
+                self._numbers[row].setPosSize(
+                    1 + GUTTER_PAD, y, gutter - GUTTER_PAD, row_h, POS_SIZE
+                )
+            self._labels[row].setPosSize(1 + gutter, y, col_w, row_h, POS_SIZE)
+        lines = count + (1 if status else 0)
+        if status:
+            status_h = self._status.getPreferredSize().Height + 2 * PAD_Y
+            self._status.setPosSize(
+                1 + gutter, 1 + count * row_h, col_w, status_h, POS_SIZE
+            )
+            height = row_h * count + status_h + 2
+        else:
+            height = row_h * lines + 2
+        width = gutter + col_w + 2
+        # The word text starts at word_x: box border (1 px) + gutter + inset.
+        anchor_x = self._word_x - 1 - gutter - TEXT_INSET
+        anchor = Rect(anchor_x, self._caret.y, 0, self._caret.height)
+        rect = place(self._position, width, height, anchor, self._area)
+        self._box.setPosSize(rect.x, rect.y, rect.width, rect.height, POS_SIZE)
+
+    def _layout_bar(self) -> None:
+        """Top/bottom bar: numbered words side by side, interface font."""
+        count = self.visible_count
+        for number in self._numbers:
+            number.setVisible(False)
         sizes = []
         for row, label in enumerate(self._labels):
             if row < count:
@@ -338,25 +499,16 @@ class SuggestionPopup:
         self._status.getModel().Label = status
         self._status.setVisible(bool(status))
         row_h = max(h for _, h in sizes)
-        if is_vertical(self._position):
-            col_w = max([self._column_width] + [w for w, _ in sizes])
-            for row, label in enumerate(self._labels[:count]):
-                label.setPosSize(1, 1 + row * row_h, col_w, row_h, POS_SIZE)
-            lines = count + (1 if status else 0)
-            if status:
-                self._status.setPosSize(1, 1 + count * row_h, col_w, row_h, POS_SIZE)
-            width, height = col_w + 2, row_h * lines + 2
-        else:
-            x = 1
-            for (w, _), label in zip(sizes, self._labels):
-                label.setPosSize(x, 1, w, row_h, POS_SIZE)
-                x += w
-            if status:
-                # Generous width: the measured width was a few pixels short.
-                status_w = self._status.getPreferredSize().Width + 4 * PAD_X
-                self._status.setPosSize(x, 1, status_w, row_h, POS_SIZE)
-                x += status_w
-            width, height = x + 1, row_h + 2
+        x = 1
+        for (w, _), label in zip(sizes, self._labels):
+            label.setPosSize(x, 1, w, row_h, POS_SIZE)
+            x += w
+        if status:
+            # Generous width: the measured width was a few pixels short.
+            status_w = self._status.getPreferredSize().Width + 4 * PAD_X
+            self._status.setPosSize(x, 1, status_w, row_h, POS_SIZE)
+            x += status_w
+        width, height = x + 1, row_h + 2
         rect = place(self._position, width, height, self._caret, self._area)
         self._box.setPosSize(rect.x, rect.y, rect.width, rect.height, POS_SIZE)
 
@@ -373,4 +525,5 @@ class SuggestionPopup:
                 log.debug("popup dispose failed (window already gone?)")
         self._box = None
         self._labels = []
+        self._numbers = []
         self._visible = False

@@ -56,7 +56,7 @@ from predictive import buildinfo, keymap
 from predictive.engine import SENTENCE_END, Engine
 from predictive.nextword import NextWordPredictor, model_info
 from predictive.logsetup import LOGGER_NAME, setup_logging
-from predictive.popup import SuggestionPopup
+from predictive.popup import NUMBERS_HIDE, NUMBERS_LEFT, ListFont, SuggestionPopup
 from predictive.popup_layout import POSITION_NONE, POSITIONS, page_move, page_top
 from predictive.settings import Settings
 from predictive.textutil import MAX_LOOKBEHIND, extract_context
@@ -421,7 +421,13 @@ class ViewSession(unohelper.Base, XKeyHandler, XSelectionChangeListener):
             self._popup = SuggestionPopup(self.app.ctx, window, self.pick_by_mouse)
         start = time.perf_counter()
         shown = self._popup.show(
-            pending.words, pending.index, self.app.list_position, self.app.list_rows
+            pending.words,
+            pending.index,
+            self.app.list_position,
+            self.app.list_rows,
+            typed=pending.prefix,
+            font=self._list_font(),
+            numbers=self.app.list_numbers,
         )
         if self.app.debug:
             log.debug(
@@ -429,6 +435,23 @@ class ViewSession(unohelper.Base, XKeyHandler, XSelectionChangeListener):
                 "shown" if shown else "not shown (cursor not found)",
                 (time.perf_counter() - start) * 1000,
             )
+
+    def _list_font(self) -> Optional[ListFont]:
+        """Font of the text at the cursor, scaled by the zoom (None if unknown)."""
+        try:
+            cursor = self.controller.getViewCursor()
+            name = cursor.getPropertyValue("CharFontName")
+            height = float(cursor.getPropertyValue("CharHeight"))
+            weight = float(cursor.getPropertyValue("CharWeight"))
+            posture = cursor.getPropertyValue("CharPosture")
+            zoom = int(self.controller.getViewSettings().ZoomValue) or 100
+        except Exception:
+            log.debug("cannot read the font at the cursor", exc_info=True)
+            return None
+        if not name or height <= 0:
+            return None
+        italic = getattr(posture, "value", "NONE") in ("ITALIC", "OBLIQUE")
+        return ListFont(name, height * zoom / 100.0, weight, italic)
 
     def _hide_list(self) -> None:
         if self._popup is not None:
@@ -758,6 +781,12 @@ class App:
         return min(9, max(1, int(self.settings["max_suggestions"])))
 
     @property
+    def list_numbers(self) -> str:
+        """Numbers in the list under the cursor: "hide" or "left" (gutter)."""
+        value = str(self.settings["list_numbers"])
+        return value if value in (NUMBERS_HIDE, NUMBERS_LEFT) else NUMBERS_HIDE
+
+    @property
     def list_position(self) -> str:
         position = str(self.settings["list_position"])
         return position if position in POSITIONS else POSITIONS[0]
@@ -851,6 +880,10 @@ OPT_MODEL_STATUS = "ModelStatus"
 OPT_VERSION_INFO = "VersionInfo"
 OPT_LICENCE_INFO = "LicenceInfo"
 OPT_INLINE = "Inline"
+OPT_LIST_NUMBERS = "ListNumbers"
+# Entries of the ListNumbers list and the matching setting values.
+LIST_NUMBERS_CHOICES = (NUMBERS_HIDE, NUMBERS_LEFT)
+LIST_NUMBERS_LABELS = ("Hidden", "Left of the words")
 # Entries of the ListPosition list, in the order of popup_layout.POSITIONS.
 LIST_POSITION_LABELS = (
     "Under the cursor",
@@ -918,6 +951,9 @@ def _load_options_page(app: App, window: Any) -> None:
     position = _model(window, OPT_LIST_POSITION)
     position.StringItemList = LIST_POSITION_LABELS
     position.SelectedItems = (POSITIONS.index(app.list_position),)
+    numbers = _model(window, OPT_LIST_NUMBERS)
+    numbers.StringItemList = LIST_NUMBERS_LABELS
+    numbers.SelectedItems = (LIST_NUMBERS_CHOICES.index(app.list_numbers),)
     _model(window, OPT_CONTEXT).State = 1 if settings["context_prediction"] else 0
     _model(window, OPT_NEXT_WORD).State = 1 if settings["next_word"] else 0
     for name, key in (
@@ -959,6 +995,9 @@ def _save_options_page(app: App, window: Any) -> None:
     position = list(_model(window, OPT_LIST_POSITION).SelectedItems)
     if position and 0 <= position[0] < len(POSITIONS):
         changes["list_position"] = POSITIONS[position[0]]
+    numbers = list(_model(window, OPT_LIST_NUMBERS).SelectedItems)
+    if numbers and 0 <= numbers[0] < len(LIST_NUMBERS_CHOICES):
+        changes["list_numbers"] = LIST_NUMBERS_CHOICES[numbers[0]]
     changes["context_prediction"] = _model(window, OPT_CONTEXT).State == 1
     changes["next_word"] = _model(window, OPT_NEXT_WORD).State == 1
     for name, key in (

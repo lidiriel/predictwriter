@@ -4,10 +4,10 @@
      Control ids are read by predictive/uno_glue.py (OPT_* constants).
      Size: the visible page area of the Options dialog is about 355 x 337
      dialog units (LibreOffice 25.2, measured on a screenshot); this page uses
-     340 x 324 to leave a margin for other fonts and screens. -->
+     340 x 326 to leave a margin for other fonts and screens. -->
 <dlg:window xmlns:dlg="http://openoffice.org/2000/dialog"
             xmlns:script="http://openoffice.org/2000/script"
-            dlg:id="OptionsPage" dlg:left="0" dlg:top="0" dlg:width="340" dlg:height="324"
+            dlg:id="OptionsPage" dlg:left="0" dlg:top="0" dlg:width="340" dlg:height="326"
             dlg:closeable="false" dlg:moveable="false" dlg:withtitlebar="false">
   <dlg:bulletinboard>
     <dlg:fixedline dlg:id="HeaderCompletion" dlg:left="6" dlg:top="3" dlg:width="328" dlg:height="8"
@@ -44,25 +44,29 @@
     <dlg:numericfield dlg:id="MaxCandidates" dlg:tab-index="6" dlg:left="175" dlg:top="135" dlg:width="40" dlg:height="12"
                       dlg:decimal-accuracy="0" dlg:value-min="1" dlg:value-max="100" dlg:value="30"
                       dlg:spin="true" dlg:strict-format="true"/>
-    <dlg:checkbox dlg:id="Inline" dlg:tab-index="7" dlg:left="12" dlg:top="153" dlg:width="320" dlg:height="10"
+    <dlg:text dlg:id="ListNumbersLabel" dlg:left="12" dlg:top="155" dlg:width="160" dlg:height="10"
+              dlg:value="Numbers in the list under the cursor:"/>
+    <dlg:menulist dlg:id="ListNumbers" dlg:tab-index="7" dlg:left="175" dlg:top="153" dlg:width="110" dlg:height="12"
+                  dlg:spin="true"/>
+    <dlg:checkbox dlg:id="Inline" dlg:tab-index="8" dlg:left="12" dlg:top="171" dlg:width="320" dlg:height="10"
                   dlg:value="Also show the highlighted word in the text (selected letters)" dlg:checked="false"/>
-    <dlg:text dlg:id="InlineNote" dlg:left="24" dlg:top="165" dlg:width="308" dlg:height="18" dlg:multiline="true"
-              dlg:value="Off by default because it slows typing: LibreOffice needs about 40 ms for each change to the text, the list alone about 5 ms per key."/>
-    <dlg:fixedline dlg:id="HeaderContext" dlg:left="6" dlg:top="189" dlg:width="328" dlg:height="8"
+    <dlg:text dlg:id="InlineNote" dlg:left="24" dlg:top="183" dlg:width="308" dlg:height="10" dlg:multiline="true"
+              dlg:value="Off by default: about 40 ms per change to the text, against 5 ms per key for the list alone."/>
+    <dlg:fixedline dlg:id="HeaderContext" dlg:left="6" dlg:top="197" dlg:width="328" dlg:height="8"
                    dlg:value="Context prediction (n-grams)"/>
-    <dlg:checkbox dlg:id="Context" dlg:tab-index="8" dlg:left="12" dlg:top="202" dlg:width="320" dlg:height="10"
+    <dlg:checkbox dlg:id="Context" dlg:tab-index="9" dlg:left="12" dlg:top="210" dlg:width="320" dlg:height="10"
                   dlg:value="Rank completions by the previous words" dlg:checked="false"/>
-    <dlg:checkbox dlg:id="NextWord" dlg:tab-index="9" dlg:left="12" dlg:top="216" dlg:width="320" dlg:height="10"
+    <dlg:checkbox dlg:id="NextWord" dlg:tab-index="10" dlg:left="12" dlg:top="224" dlg:width="320" dlg:height="10"
                   dlg:value="Predict the next word after a space" dlg:checked="false"/>
-    <dlg:text dlg:id="AcceptCompletionLabel" dlg:left="12" dlg:top="233" dlg:width="160" dlg:height="10"
+    <dlg:text dlg:id="AcceptCompletionLabel" dlg:left="12" dlg:top="241" dlg:width="160" dlg:height="10"
               dlg:value="Accept a completion with:"/>
-    <dlg:menulist dlg:id="AcceptCompletion" dlg:tab-index="10" dlg:left="175" dlg:top="231" dlg:width="110" dlg:height="12"
+    <dlg:menulist dlg:id="AcceptCompletion" dlg:tab-index="11" dlg:left="175" dlg:top="239" dlg:width="110" dlg:height="12"
                   dlg:spin="true"/>
-    <dlg:text dlg:id="AcceptNextWordLabel" dlg:left="12" dlg:top="249" dlg:width="160" dlg:height="10"
+    <dlg:text dlg:id="AcceptNextWordLabel" dlg:left="12" dlg:top="257" dlg:width="160" dlg:height="10"
               dlg:value="Accept a next-word prediction with:"/>
-    <dlg:menulist dlg:id="AcceptNextWord" dlg:tab-index="11" dlg:left="175" dlg:top="247" dlg:width="110" dlg:height="12"
+    <dlg:menulist dlg:id="AcceptNextWord" dlg:tab-index="12" dlg:left="175" dlg:top="255" dlg:width="110" dlg:height="12"
                   dlg:spin="true"/>
-    <dlg:text dlg:id="ModelStatus" dlg:left="12" dlg:top="265" dlg:width="320" dlg:height="18" dlg:multiline="true"
+    <dlg:text dlg:id="ModelStatus" dlg:left="12" dlg:top="273" dlg:width="320" dlg:height="10" dlg:multiline="true"
               dlg:value=""/>
     <dlg:text dlg:id="Note" dlg:left="12" dlg:top="288" dlg:width="320" dlg:height="10"
               dlg:value="Tip: turn off Tools ▸ AutoCorrect Options ▸ Word Completion to avoid double completions."/>

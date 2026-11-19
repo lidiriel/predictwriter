@@ -22,6 +22,10 @@ DEFAULTS: Dict[str, Any] = {
     # words for the engine); the list itself only draws the visible rows.
     "max_candidates": 30,
     "list_position": "cursor",  # cursor | bottom | top | none
+    # Numbers (Alt+1...Alt+9) in the list under the cursor: "hide", or "left"
+    # (grey column left of the words; the words stay aligned under the typed
+    # letters either way). The top/bottom bars always show numbers.
+    "list_numbers": "hide",
     # Also show the highlighted word in the text, as selected letters
     # ("prédi[re]"). Off by default for speed: every change the extension
     # makes to the text costs LibreOffice 15-60 ms (about 40 ms to show the

@@ -4,7 +4,7 @@
              xmlns:lo="http://libreoffice.org/extensions/description/2011"
              xmlns:xlink="http://www.w3.org/1999/xlink">
   <identifier value="net.scilink.predictivewriter"/>
-  <version value="1.0"/>
+  <version value="1.1"/>
   <display-name>
     <name lang="en">Predictive Writer</name>
   </display-name>
