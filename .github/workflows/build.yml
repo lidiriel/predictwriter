@@ -29,12 +29,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # 3.8 and 3.9 are not available on Ubuntu 26.04 (ubuntu-latest since
+          # November 2026) in actions/setup-python: keep them on 24.04.
           - label: "Python 3.8 - LibreOffice 7.4-24.2 on Windows/macOS"
             python: "3.8"
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - label: "Python 3.9 - LibreOffice 24.8 on Windows/macOS"
             python: "3.9"
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - label: "Python 3.10 - Ubuntu 22.04 (LibreOffice 7.3)"
             python: "3.10"
             os: ubuntu-22.04
@@ -54,8 +56,8 @@ jobs:
             python: "3.12"
             os: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install pytest
@@ -64,8 +66,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - run: python -m pip install black==26.10.1 pyflakes==4.1.0
@@ -79,10 +81,10 @@ jobs:
     permissions:
       contents: write  # to create a release on tags
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # history and tags: the version comes from the last vX.Y tag
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Read the version (last vX.Y tag)
@@ -107,7 +109,7 @@ jobs:
           fi
       - name: Build the .oxt
         run: python tools/build_oxt.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: predictive-writer-${{ steps.version.outputs.version }}
           path: dist/*.oxt

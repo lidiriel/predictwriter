@@ -204,8 +204,8 @@ LibreOffice uses the system's Python; on Windows and macOS it ships its own:
 
 | Runner | Python | Users it stands for |
 | --- | --- | --- |
-| `ubuntu-latest` | 3.8 | LibreOffice 7.4 – 24.2 on Windows / macOS |
-| `ubuntu-latest` | 3.9 | LibreOffice 24.8 on Windows / macOS |
+| `ubuntu-24.04` | 3.8 | LibreOffice 7.4 – 24.2 on Windows / macOS |
+| `ubuntu-24.04` | 3.9 | LibreOffice 24.8 on Windows / macOS |
 | `ubuntu-22.04` | 3.10 | Ubuntu 22.04 (LibreOffice 7.3) |
 | `ubuntu-latest` | 3.11 | Debian 12 bookworm (LibreOffice 7.4) |
 | `ubuntu-latest` | 3.12 | Ubuntu 24.04 (LibreOffice 24.2) |
@@ -216,7 +216,8 @@ LibreOffice uses the system's Python; on Windows and macOS it ships its own:
 Python versions taken from LibreOffice's `download.lst` (bundled Python) and from
 packages.debian.org / packages.ubuntu.com (November 2026). The runners are listed in
 [actions/runner-images](https://github.com/actions/runner-images); `ubuntu-latest` is
-Ubuntu 24.04.
+Ubuntu 26.04, where `actions/setup-python` no longer provides Python 3.8 and 3.9, hence
+`ubuntu-24.04` for those two.
 
 To publish a release, push a version tag; the workflow builds the `.oxt` with that
 version (it fetches the whole history and tags) and creates a GitHub Release with the
