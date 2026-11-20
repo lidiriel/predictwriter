@@ -756,6 +756,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    if hasattr(os, "nice"):  # Linux/macOS: keep LibreOffice responsive
+        try:
+            os.nice(10)
+        except OSError:
+            pass
     sources = [parse_source(s, args.lang) for s in args.source]
     for source in sources:
         if isinstance(source, WikimediaSource):

@@ -53,6 +53,7 @@ from com.sun.star.document import XDocumentEventListener
 from com.sun.star.view import XSelectionChangeListener
 
 from predictive import buildinfo, keymap
+from predictive.build_runner import BuildProcess, builder_command, find_python
 from predictive.engine import SENTENCE_END, Engine
 from predictive.nextword import NextWordPredictor, model_info
 from predictive.logsetup import LOGGER_NAME, setup_logging
@@ -707,6 +708,151 @@ def _is_text_document(model: Any) -> bool:
         return False
 
 
+class _BuildDeferred(unohelper.Base, XCallback):
+    """AsyncCallback target: hands build events over to the main thread."""
+
+    def __init__(self, manager: "ModelBuildManager") -> None:
+        self._manager = manager
+
+    def notify(self, data: Any) -> None:
+        self._manager.flush()
+
+
+class ModelBuildManager:
+    """Builds the n-gram model in a separate process (Options page).
+
+    The child writes ``<model>.new``; on success the manager installs it with
+    :meth:`App.install_model`. Events from the child arrive on a reader
+    thread and are handed over to the main thread with AsyncCallback; the UI
+    registers listeners with :meth:`add_listener`.
+    """
+
+    def __init__(self, app: "App") -> None:
+        self.app = app
+        self.process: Optional[BuildProcess] = None
+        self.last_event: Optional[Dict[str, Any]] = None
+        self._listeners: List[Callable[[Dict[str, Any]], None]] = []
+        self._queue: List[Dict[str, Any]] = []
+        self._lock = threading.Lock()
+        self._async: Any = None
+        self._deferred = _BuildDeferred(self)
+        self._python: Optional[str] = None
+
+    @property
+    def running(self) -> bool:
+        return self.process is not None and self.process.running
+
+    def add_listener(self, listener: Callable[[Dict[str, Any]], None]) -> None:
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def remove_listener(self, listener: Callable[[Dict[str, Any]], None]) -> None:
+        if listener in self._listeners:
+            self._listeners.remove(listener)
+
+    def program_dir(self) -> Optional[str]:
+        """LibreOffice's program folder (bundled Python on Windows/macOS)."""
+        try:
+            smgr = self.app.ctx.getServiceManager()
+            subst = smgr.createInstanceWithContext(
+                "com.sun.star.util.PathSubstitution", self.app.ctx
+            )
+            return uno.fileUrlToSystemPath(subst.substituteVariables("$(prog)", True))
+        except Exception:
+            log.debug("cannot resolve $(prog)", exc_info=True)
+            return None
+
+    def start(
+        self,
+        sources: List[str],
+        max_download_mb: int,
+        max_words: int,
+        min_count: int,
+    ) -> Optional[str]:
+        """Start a build; returns an error message, or None if it started."""
+        if self.running:
+            return "A build is already running."
+        if not sources:
+            return "Choose at least one source."
+        if self._python is None:
+            self._python = find_python(self.program_dir())
+        if self._python is None:
+            return "No Python interpreter found to run the build."
+        new_path = self.app.model_path() + ".new"
+        command = builder_command(
+            self._python,
+            new_path,
+            self.app.language,
+            sources,
+            max_download_mb,
+            max_words,
+            min_count,
+        )
+        if self._async is None:
+            self._async = self.app.ctx.getServiceManager().createInstanceWithContext(
+                "com.sun.star.awt.AsyncCallback", self.app.ctx
+            )
+        self.last_event = None
+        self.process = BuildProcess(command, new_path, self._post, self._post_exit)
+        try:
+            self.process.start()
+        except OSError as exc:
+            self.process = None
+            return "Cannot start the build: %s" % exc
+        return None
+
+    def cancel(self) -> None:
+        if self.process is not None:
+            self.process.cancel()
+
+    # Reader thread -> main thread ----------------------------------------------
+    def _post(self, event: Dict[str, Any]) -> None:
+        with self._lock:
+            self._queue.append(event)
+        self._async.addCallback(self._deferred, None)
+
+    def _post_exit(self, code: int, last: Optional[Dict[str, Any]]) -> None:
+        self._post({"event": "exit", "code": code, "last": last or {}})
+
+    def flush(self) -> None:
+        """Main thread: apply the queued events and notify the listeners."""
+        with self._lock:
+            events, self._queue = self._queue, []
+        for event in events:
+            if event.get("event") == "exit":
+                event = self._finish(event)
+            self.last_event = event
+            for listener in list(self._listeners):
+                try:
+                    listener(event)
+                except Exception:
+                    log.exception("build listener failed")
+
+    def _finish(self, exit_event: Dict[str, Any]) -> Dict[str, Any]:
+        last = exit_event.get("last") or {}
+        new_path = self.app.model_path() + ".new"
+        if exit_event.get("code") == 0 and last.get("event") == "done":
+            try:
+                self.app.install_model(new_path)
+            except OSError as exc:
+                log.exception("cannot install the new model")
+                return {
+                    "event": "error",
+                    "message": "Cannot install the model: %s" % exc,
+                }
+            return dict(last, event="installed")
+        try:
+            os.remove(new_path)
+        except OSError:
+            pass
+        if last.get("event") in ("cancelled", "error"):
+            return last
+        return {
+            "event": "error",
+            "message": "build failed (exit %s)" % exit_event.get("code"),
+        }
+
+
 class App:
     """Process-wide state: settings, engine and document tracker."""
 
@@ -721,6 +867,7 @@ class App:
         self._worker_model = ""
         self._configure()
         self.tracker = DocumentTracker(self)
+        self.builder = ModelBuildManager(self)
 
     @property
     def enabled(self) -> bool:
@@ -774,6 +921,21 @@ class App:
             self.worker = PredictionWorker(factory, on_result)
             self._worker_model = path
             log.info("context prediction: using %s", path)
+
+    def install_model(self, new_path: str) -> None:
+        """Replace the n-gram model by ``new_path`` (main thread).
+
+        The prediction thread holds the old model open: stop it first (on
+        Windows an open file cannot be replaced), then restart it on the new
+        model if context prediction is on.
+        """
+        if self.worker is not None:
+            self.worker.close()
+            self.worker = None
+            self._worker_model = ""
+        os.replace(new_path, self.model_path())
+        log.info("new n-gram model installed: %s", self.model_path())
+        self._update_worker()
 
     @property
     def list_rows(self) -> int:
