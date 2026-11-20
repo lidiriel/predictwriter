@@ -167,7 +167,7 @@ python3 tools/build_oxt.py                     # -> dist/predictive-writer-<vers
 To try a build on your own machine (see [Installation](#installation)):
 
 ```bash
-unopkg add -f dist/predictive-writer-1.1.oxt   # close LibreOffice first
+unopkg add -f dist/predictive-writer-1.2.oxt   # close LibreOffice first
 soffice --writer                               # start from a terminal to see errors
 ```
 
@@ -179,13 +179,13 @@ reachable from the current commit (`git describe`) and writes that version into 
 release a new version, just tag it — no file to edit:
 
 ```bash
-git tag v1.2
-git push origin v1.2      # also publishes the GitHub release, see below
+git tag v1.3
+git push origin v1.3      # also publishes the GitHub release, see below
 ```
 
 Between two tags, builds keep the last tag's version (LibreOffice versions are
 numbers only) and the bottom of the Options page shows how far from the tag they are,
-e.g. *Predictive Writer 1.1 (+3 commits) — commit abc1234 of 2026-11-20 09:00*, with
+e.g. *Predictive Writer 1.2 (+3 commits) — commit abc1234 of 2026-11-20 09:00*, with
 *(with uncommitted changes)* if the working tree was modified. Installing a newer `.oxt`
 with `unopkg add -f` replaces the old one.
 
@@ -249,7 +249,7 @@ Third-party data and their licences (MPL 2.0, CC BY-SA 4.0...) are listed in
 On any computer, from the packaged extension `predictive-writer-<version>.oxt`, built
 with [Build](#build) or downloaded from the
 [Releases page](https://github.com/lidiriel/predictwriter/releases)
-(about 2 MB; current version: **1.1**, shown in **Tools → Extension Manager**).
+(about 2 MB; current version: **1.2**, shown in **Tools → Extension Manager**).
 
 ### Prerequisites
 
@@ -263,10 +263,10 @@ and pressagio are inside the `.oxt` — no Hunspell, no `pip` package.
 
 ### Steps
 
-1. Copy `predictive-writer-1.1.oxt` to the computer.
+1. Copy `predictive-writer-1.2.oxt` to the computer.
 2. Close LibreOffice, then install the extension:
    ```bash
-   unopkg add predictive-writer-1.1.oxt
+   unopkg add predictive-writer-1.2.oxt
    ```
    or, in LibreOffice, **Tools → Extension Manager → Add…**
 3. Start Writer and turn off the built-in completion: **Tools → AutoCorrect Options →
@@ -305,7 +305,7 @@ space** in the Options page (restart LibreOffice if Writer was already open).
 
 `log.txt`, in the same `predictive-writer` folder, should contain after opening Writer:
 
-- `Predictive Writer 1.1 — commit … starting` (the version and the commit it was built from)
+- `Predictive Writer 1.2 — commit … starting` (the version and the commit it was built from)
 - `loaded fr_FR: 449932 words` a few seconds later
 - `context prediction: using …` if the model is in place and the options are ticked
 
