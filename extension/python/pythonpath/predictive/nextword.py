@@ -23,7 +23,7 @@ import configparser
 import os
 import re
 import sqlite3
-import urllib.parse
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 import pressagio
@@ -52,8 +52,9 @@ def open_readonly(path: str) -> sqlite3.Connection:
     """Open a SQLite file read-only; raise if it does not exist."""
     if not os.path.isfile(path):
         raise FileNotFoundError(path)
-    uri = "file:%s?mode=ro" % urllib.parse.quote(os.path.abspath(path))
-    return sqlite3.connect(uri, uri=True)
+    # Path.as_uri() gives "file:///home/..." or "file:///C:/Users/..." (a
+    # hand-built "file:" + path is invalid on Windows).
+    return sqlite3.connect(Path(path).absolute().as_uri() + "?mode=ro", uri=True)
 
 
 def model_info(path: str) -> Dict[str, str]:

@@ -173,29 +173,54 @@ soffice --writer                               # start from a terminal to see er
 
 ### Version
 
-The version (major.minor) is set in two places that must agree, checked by
-`build_oxt.py` and by the tests: `extension/description.xml` (`<version value="1.1"/>`,
-shown by LibreOffice) and `extension/python/pythonpath/predictive/__init__.py`
-(`__version__`). Installing a newer `.oxt` with `unopkg add -f` replaces the old one.
+**The git tag is the version.** `build_oxt.py` takes the last tag `v<major>.<minor>`
+reachable from the current commit (`git describe`) and writes that version into the
+`.oxt` (in its `description.xml`, shown by LibreOffice, and in `buildinfo.json`). To
+release a new version, just tag it — no file to edit:
 
-`build_oxt.py` also stores the last git commit (short hash and date, and whether there
-were uncommitted changes) inside the `.oxt`; the bottom of the Options page shows it,
-e.g. *Predictive Writer 1.1 — commit 92af856 of 2026-11-12 07:35*.
+```bash
+git tag v1.2
+git push origin v1.2      # also publishes the GitHub release, see below
+```
+
+Between two tags, builds keep the last tag's version (LibreOffice versions are
+numbers only) and the bottom of the Options page shows how far from the tag they are,
+e.g. *Predictive Writer 1.1 (+3 commits) — commit abc1234 of 2026-11-20 09:00*, with
+*(with uncommitted changes)* if the working tree was modified. Installing a newer `.oxt`
+with `unopkg add -f` replaces the old one.
+
+Without git or without a `v*` tag (e.g. building from a source archive), the version
+written in `extension/description.xml` and `predictive/__init__.py` (`__version__`) is
+used as a fallback; these two must agree (checked by `build_oxt.py` and the tests).
 
 ### Automatic build on GitHub
 
 The workflow [.github/workflows/build.yml](.github/workflows/build.yml) runs on every
-push and pull request: tests (Python 3.8 and 3.13), lint (`black`, `pyflakes`), then
-the build. The `.oxt` can be downloaded from the run's page (**Actions** tab,
-*Artifacts*).
+push and pull request: the tests, lint (`black`, `pyflakes`), then the build. The `.oxt`
+can be downloaded from the run's page (**Actions** tab, *Artifacts*).
 
-To publish a release, push a tag `v<version>` matching `description.xml`; the workflow
-checks it and creates a GitHub Release with the `.oxt` attached:
+The tests run on every Python that executes the extension for some users. On Linux,
+LibreOffice uses the system's Python; on Windows and macOS it ships its own:
 
-```bash
-git tag v1.1
-git push origin v1.1
-```
+| Runner | Python | Users it stands for |
+| --- | --- | --- |
+| `ubuntu-latest` | 3.8 | LibreOffice 7.4 – 24.2 on Windows / macOS |
+| `ubuntu-latest` | 3.9 | LibreOffice 24.8 on Windows / macOS |
+| `ubuntu-22.04` | 3.10 | Ubuntu 22.04 (LibreOffice 7.3) |
+| `ubuntu-latest` | 3.11 | Debian 12 bookworm (LibreOffice 7.4) |
+| `ubuntu-latest` | 3.12 | Ubuntu 24.04 (LibreOffice 24.2) |
+| `ubuntu-latest` | 3.13 | Debian 13 trixie (LibreOffice 25.2) |
+| `windows-latest` | 3.10 | Windows, LibreOffice 25.2 |
+| `windows-latest` | 3.12 | Windows, LibreOffice 26.2 |
+
+Python versions taken from LibreOffice's `download.lst` (bundled Python) and from
+packages.debian.org / packages.ubuntu.com (November 2026). The runners are listed in
+[actions/runner-images](https://github.com/actions/runner-images); `ubuntu-latest` is
+Ubuntu 24.04.
+
+To publish a release, push a version tag; the workflow builds the `.oxt` with that
+version (it fetches the whole history and tags) and creates a GitHub Release with the
+`.oxt` attached. It refuses if the pushed tag is not the version tag of its commit.
 
 ### Word lists
 

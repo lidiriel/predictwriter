@@ -1,9 +1,10 @@
 # Test, lint and package the LibreOffice extension.
 #
-# - Every push and pull request: tests (Python 3.8 and 3.13), lint, and the
-#   .oxt as a downloadable artifact of the run ("Actions" tab).
-# - A tag "v<version>" (e.g. v1.0, matching extension/description.xml):
-#   also creates a GitHub Release with the .oxt attached.
+# - Every push and pull request: tests on every Python that LibreOffice uses
+#   (3.8-3.13, Linux, plus Windows), lint, and the .oxt as a downloadable
+#   artifact of the run ("Actions" tab).
+# - A tag "v<major>.<minor>" (e.g. v1.2): it *is* the version (tools/build_oxt.py
+#   reads it with git describe); also creates a GitHub Release with the .oxt.
 name: Build extension
 
 on:
@@ -18,18 +19,40 @@ permissions:
 
 jobs:
   test:
-    name: Tests (Python ${{ matrix.python }})
+    # One entry per Python that runs the extension for some users. On Linux
+    # LibreOffice uses the system Python; on Windows/macOS it bundles its own
+    # (versions checked in LibreOffice's download.lst and packages.debian.org /
+    # packages.ubuntu.com, November 2026).
+    name: Tests (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Oldest supported Python (CLAUDE.md: 3.8+); not on ubuntu-24.04.
-          - python: "3.8"
-            os: ubuntu-22.04
-          # Python of LibreOffice 25.2 on Debian 13.
-          - python: "3.13"
+          - label: "Python 3.8 - LibreOffice 7.4-24.2 on Windows/macOS"
+            python: "3.8"
             os: ubuntu-latest
+          - label: "Python 3.9 - LibreOffice 24.8 on Windows/macOS"
+            python: "3.9"
+            os: ubuntu-latest
+          - label: "Python 3.10 - Ubuntu 22.04 (LibreOffice 7.3)"
+            python: "3.10"
+            os: ubuntu-22.04
+          - label: "Python 3.11 - Debian 12 (LibreOffice 7.4)"
+            python: "3.11"
+            os: ubuntu-latest
+          - label: "Python 3.12 - Ubuntu 24.04 (LibreOffice 24.2)"
+            python: "3.12"
+            os: ubuntu-latest
+          - label: "Python 3.13 - Debian 13 (LibreOffice 25.2)"
+            python: "3.13"
+            os: ubuntu-latest
+          - label: "Windows - Python 3.10 (LibreOffice 25.2)"
+            python: "3.10"
+            os: windows-latest
+          - label: "Windows - Python 3.12 (LibreOffice 26.2)"
+            python: "3.12"
+            os: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -57,20 +80,29 @@ jobs:
       contents: write  # to create a release on tags
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # history and tags: the version comes from the last vX.Y tag
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Read the version
+      - name: Read the version (last vX.Y tag)
         id: version
         run: |
-          version=$(python -c "import sys; sys.path.insert(0, 'tools'); import build_oxt; print(build_oxt.check_version(build_oxt.ROOT / 'extension'))")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Version: $version"
-      - name: Check that the tag matches the version
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import sys
+          sys.path.insert(0, "tools")
+          import build_oxt
+          version, origin = build_oxt.resolve_version(build_oxt.ROOT / "extension")
+          print("version=%s" % version)
+          print("tag=%s" % (origin.get("tag") or ""))
+          print("since=%s" % origin.get("commits_since_tag", ""))
+          PY
+          cat "$GITHUB_OUTPUT"
+      - name: Check that the pushed tag is the version tag of this commit
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          if [ "$GITHUB_REF_NAME" != "v${{ steps.version.outputs.version }}" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match version ${{ steps.version.outputs.version }} in extension/description.xml"
+          if [ "$GITHUB_REF_NAME" != "${{ steps.version.outputs.tag }}" ] || [ "${{ steps.version.outputs.since }}" != "0" ]; then
+            echo "::error::tag $GITHUB_REF_NAME is not the v<major>.<minor> tag of this commit (found ${{ steps.version.outputs.tag }} + ${{ steps.version.outputs.since }} commits)"
             exit 1
           fi
       - name: Build the .oxt

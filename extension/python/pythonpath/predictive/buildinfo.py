@@ -1,8 +1,10 @@
 """Version and build information (plain Python, no ``uno``).
 
 ``tools/build_oxt.py`` writes ``buildinfo.json`` next to this module inside
-the ``.oxt`` (it is not in the source tree): the version, and the last git
+the ``.oxt`` (it is not in the source tree): the version (from the last
+``vX.Y`` git tag), the number of commits since that tag, and the last git
 commit (short hash, date, whether the working tree had uncommitted changes).
+``predictive.__version__`` is only a fallback when not packaged.
 """
 
 import json
@@ -29,6 +31,9 @@ def describe(info: Optional[Dict[str, object]] = None) -> str:
     info = load() if info is None else info
     version = info.get("version") or __version__
     text = "Predictive Writer %s" % version
+    since = info.get("commits_since_tag")
+    if isinstance(since, int) and since > 0:
+        text += " (+%d commit%s)" % (since, "s" if since > 1 else "")
     if not info:
         return text + " — development version (not packaged)"
     commit, date = info.get("commit"), str(info.get("commit_date") or "")

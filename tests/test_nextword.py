@@ -92,3 +92,17 @@ def test_model_opened_read_only_and_missing_file(model, tmp_path):
 
 def test_normalize():
     assert normalize("l’arbre ; x") == "l'arbre ; x"
+
+
+def test_model_path_with_spaces_and_accents(tmp_path):
+    # Paths such as "C:\Users\Prénom Nom\..." on Windows: the SQLite URI must be
+    # built by pathlib, not by hand.
+    folder = tmp_path / "Prénom Nom" / "profil #1"
+    folder.mkdir(parents=True)
+    path = str(folder / "ngrams.sqlite")
+    tn.train([("t", "un deux trois un deux")], path, min_count=1)
+    p = NextWordPredictor(path)
+    try:
+        assert p.predict(["un"])[0] == "deux"
+    finally:
+        p.close()

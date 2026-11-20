@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """Zip ``extension/`` into ``dist/predictive-writer-<version>.oxt``.
 
-The version (major.minor, e.g. ``1.0``) is read from
-``extension/description.xml`` and must match ``predictive.__version__``.
+The version (major.minor, e.g. ``1.1``) comes from the last git tag
+``v<major>.<minor>`` reachable from the current commit (``git describe``):
+to release a version, tag it (``git tag v1.2``). Inside the archive,
+``description.xml`` gets that version (the source file is not modified).
+Without git or without such a tag, the version declared in
+``extension/description.xml`` (which must match ``predictive.__version__``)
+is used as a fallback.
+
 A ``buildinfo.json`` is added inside the archive (not in the source tree)
-with the version and the last git commit (hash, date, uncommitted changes),
-shown at the bottom of the Options page.
+with the version, the tag, the number of commits since the tag and the last
+git commit (hash, date, uncommitted changes), shown at the bottom of the
+Options page.
 """
 
 import argparse
@@ -17,11 +24,14 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from typing import Optional, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 SKIP_DIRS = {"__pycache__", ".pytest_cache"}
 SKIP_SUFFIXES = {".pyc", ".pyo"}
 VERSION_FORMAT = re.compile(r"^\d+\.\d+$")
+TAG_GLOB = "v[0-9]*"  # tags considered as versions
+_DESCRIBE = re.compile(r"^(?P<tag>.+)-(?P<distance>\d+)-g[0-9a-f]+$")
 
 
 def description_version(src: Path) -> str:
@@ -57,6 +67,45 @@ def check_version(src: Path) -> str:
     return declared
 
 
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(root), *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def tag_version(root: Path) -> Optional[Tuple[str, str, int]]:
+    """``(version, tag, commits since the tag)`` from the last ``vX.Y`` tag.
+
+    Returns None if ``root`` is not a git repository, git is missing or no
+    ``v*`` tag is reachable. Raises ``ValueError`` if the tag is not
+    ``v<major>.<minor>``.
+    """
+    try:
+        described = _git(root, "describe", "--tags", "--long", "--match", TAG_GLOB)
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    match = _DESCRIBE.match(described)
+    if not match:
+        return None
+    tag, distance = match.group("tag"), int(match.group("distance"))
+    version = tag[1:]
+    if not VERSION_FORMAT.match(version):
+        raise ValueError("tag %s is not v<major>.<minor> (e.g. v1.2)" % tag)
+    return version, tag, distance
+
+
+def resolve_version(src: Path, root: Path = ROOT) -> Tuple[str, dict]:
+    """The version to build and how it was obtained (for buildinfo.json)."""
+    found = tag_version(root)
+    if found is not None:
+        version, tag, distance = found
+        return version, {"tag": tag, "commits_since_tag": distance}
+    return check_version(src), {"tag": None}
+
+
 BUILDINFO_PATH = "python/pythonpath/predictive/buildinfo.json"
 LICENSE_FILE = ROOT / "LICENSE"  # copied to the root of the archive
 
@@ -67,17 +116,9 @@ def git_info(root: Path) -> dict:
     Returns ``{}`` if ``root`` is not a git repository or git is missing.
     """
 
-    def git(*args: str) -> str:
-        return subprocess.run(
-            ["git", "-C", str(root), *args],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-
     try:
-        commit, date = git("log", "-1", "--format=%h%n%cI").splitlines()
-        changes = git("status", "--porcelain", "--untracked-files=no")
+        commit, date = _git(root, "log", "-1", "--format=%h%n%cI").splitlines()
+        changes = _git(root, "status", "--porcelain", "--untracked-files=no")
     except (OSError, subprocess.CalledProcessError, ValueError):
         return {}
     return {"commit": commit, "commit_date": date, "modified": bool(changes)}
@@ -95,7 +136,11 @@ def build_info(version: str, root: Path = ROOT) -> dict:
 def build(
     src: Path, out: Path, info: dict = None, license_file: Path = LICENSE_FILE
 ) -> int:
-    """Write the .oxt archive and return the number of files added."""
+    """Write the .oxt archive and return the number of files added.
+
+    With ``info``, its ``version`` replaces the one in ``description.xml``
+    (in the archive only) and ``buildinfo.json`` is added.
+    """
     out.parent.mkdir(parents=True, exist_ok=True)
     count = 0
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -105,7 +150,17 @@ def build(
                 path = Path(dirpath) / name
                 if path.suffix in SKIP_SUFFIXES:
                     continue
-                zf.write(path, path.relative_to(src).as_posix())
+                name_in_zip = path.relative_to(src).as_posix()
+                if name_in_zip == "description.xml" and info is not None:
+                    text = re.sub(
+                        r'(<version\s+value=")[^"]*(")',
+                        r"\g<1>%s\2" % info["version"],
+                        path.read_text(encoding="utf-8"),
+                        count=1,
+                    )
+                    zf.writestr(name_in_zip, text)
+                else:
+                    zf.write(path, name_in_zip)
                 count += 1
         if info is not None:
             zf.writestr(BUILDINFO_PATH, json.dumps(info, indent=2) + "\n")
@@ -124,12 +179,20 @@ def main() -> None:
     )
     args = parser.parse_args()
     try:
-        version = check_version(args.src)
+        version, origin_info = resolve_version(args.src)
     except ValueError as exc:
         sys.exit("error: %s" % exc)
     out = args.out or ROOT / "dist" / ("predictive-writer-%s.oxt" % version)
     info = build_info(version)
+    info.update(origin_info)
     count = build(args.src, out, info)
+    if info["tag"]:
+        source = "tag %s" % info["tag"]
+        if info["commits_since_tag"]:
+            source += " + %d commits" % info["commits_since_tag"]
+    else:
+        source = "description.xml (no v<major>.<minor> tag)"
+    print("version %s from %s" % (version, source))
     if "commit" in info:
         state = " + uncommitted changes" if info["modified"] else ""
         origin = "commit %s of %s%s" % (info["commit"], info["commit_date"], state)

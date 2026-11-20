@@ -349,7 +349,7 @@ def elision_pairs(
     import sqlite3
 
     allowed = {lookup_key(w): (w, e) for w, _, _, e in rows if e}
-    con = sqlite3.connect("file:%s?mode=ro" % model, uri=True)
+    con = sqlite3.connect(Path(model).absolute().as_uri() + "?mode=ro", uri=True)
     result: List[Tuple[str, str, int]] = []
     try:
         for elided, bit in grammar.ELISION_BIT.items():

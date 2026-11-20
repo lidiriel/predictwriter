@@ -55,7 +55,7 @@ def merge_by_key(entries: Sequence[Entry]) -> Dict[str, Tuple]:
 
 
 def _parse(line: str) -> Tuple[str, int, int, int]:
-    fields = line.rstrip("\n").split("\t")
+    fields = line.rstrip("\r\n").split("\t")
     word = fields[0]
     nums = [int(f) if f.isdigit() else 0 for f in fields[1:4]]
     nums += [0] * (3 - len(nums))
@@ -314,7 +314,7 @@ class WordList:
         lists: Dict[int, "array[int]"] = {}
         with open(path, encoding="utf-8") as fh:
             for line in fh:
-                fields = line.rstrip("\n").split("\t")
+                fields = line.rstrip("\r\n").split("\t")
                 if len(fields) < 2 or fields[0] not in ELISION_BIT:
                     continue
                 index = self.index_of(fields[1])
