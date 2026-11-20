@@ -79,10 +79,15 @@ WIKIMEDIA_LICENCE = (
     "as n-grams"
 )
 
-# Rough figures measured on a French Wikipedia build (30 M words from 236 MB
-# of compressed dump, about 100,000 words/s, model about 10.5 bytes/word);
-# used only for the estimate shown before a build.
-WORDS_PER_DOWNLOADED_MB = 127_000
+# Rough figures measured on French builds (Wikipedia: 30 M words from 236 MB
+# of compressed dump; Wikisource: 336 k words from 2 MB; about 100,000
+# words/s; model about 10.5 bytes/word); used only for the estimate shown
+# before a build.
+WORDS_PER_DOWNLOADED_MB = 127_000  # Wikipedia, and projects not measured
+WORDS_PER_MB_BY_PROJECT = {"wikisource": 168_000, "wikipedia": 127_000}
+# Words per byte of your files: plain text about 6 bytes per word; an .odt
+# also holds styles, a thumbnail and zip overhead.
+BYTES_PER_WORD = {".txt": 6.0, ".odt": 8.0}
 WORDS_PER_SECOND = 100_000
 MODEL_BYTES_PER_WORD = 10.5
 TEMP_BYTES_PER_WORD = 40.0  # staging tables before pruning, peak
@@ -395,6 +400,24 @@ class FolderSource:
             raise FileNotFoundError("folder not found: %s" % self.folder)
         yield from iter_folder_texts(self.folder, skipped)
 
+    def estimate_words(self, max_files: int = 20_000) -> int:
+        """Rough word count from the file sizes (stops after ``max_files``)."""
+        words = 0.0
+        seen = 0
+        for root, _dirs, names in os.walk(str(self.folder)):
+            for name in names:
+                per_word = BYTES_PER_WORD.get(os.path.splitext(name)[1].lower())
+                if per_word is None:
+                    continue
+                seen += 1
+                if seen > max_files:
+                    return int(words)
+                try:
+                    words += os.path.getsize(os.path.join(root, name)) / per_word
+                except OSError:
+                    pass
+        return int(words)
+
 
 class WikimediaSource:
     """A Wikimedia project in one language (e.g. French Wikisource)."""
@@ -630,12 +653,25 @@ def train(
 
 # Whole build -----------------------------------------------------------------------
 def estimate(sources: Sequence[Source], limits: BuildLimits) -> dict:
-    """Rough figures to show before a build (no network access)."""
-    has_web = any(getattr(s, "kind", "") == "wikimedia" for s in sources)
-    download = limits.max_download_bytes if has_web else 0
-    words = limits.max_words
-    if has_web and not any(getattr(s, "kind", "") == "folder" for s in sources):
-        words = min(words, int(download / MB * WORDS_PER_DOWNLOADED_MB))
+    """Rough figures to show before a build (no network access).
+
+    Folders are read first, then the Wikimedia projects share the download
+    budget (the first project gets most of it, hence its rate).
+    """
+    web = [s for s in sources if getattr(s, "kind", "") == "wikimedia"]
+    words = 0
+    for source in sources:
+        if getattr(source, "kind", "") == "folder":
+            words += source.estimate_words()  # type: ignore[attr-defined]
+    download = 0
+    if web and words < limits.max_words:
+        rate = WORDS_PER_MB_BY_PROJECT.get(
+            getattr(web[0], "project", ""), WORDS_PER_DOWNLOADED_MB
+        )
+        needed = (limits.max_words - words) / rate * MB
+        download = int(min(limits.max_download_bytes, needed))
+        words += int(download / MB * rate)
+    words = min(words, limits.max_words)
     seconds = words / WORDS_PER_SECOND
     if download:
         slices = max(1, download // max(1, limits.slice_bytes))

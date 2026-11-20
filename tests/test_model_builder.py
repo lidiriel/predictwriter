@@ -190,14 +190,26 @@ def test_missing_folder_is_an_error_and_writes_nothing(tmp_path):
     assert not (tmp_path / "ngrams.sqlite.part").exists()
 
 
-def test_estimate():
+def test_estimate(tmp_path):
     limits = mb.BuildLimits(max_download_bytes=250 * mb.MB, max_words=30_000_000)
     est = mb.estimate([mb.WikimediaSource("wikisource", "fr")], limits)
-    assert est["download_mb"] == 250
-    assert 25_000_000 <= est["words"] <= 30_000_000
-    assert est["minutes"] >= 5 and est["model_mb"] > 200
-    est = mb.estimate([mb.FolderSource("/tmp")], limits)
-    assert est["download_mb"] == 0
+    assert est["download_mb"] == int(30_000_000 / 168_000)  # words limit first
+    assert est["words"] <= 30_000_000 and est["model_mb"] > 200
+    est = mb.estimate([mb.WikimediaSource("wikipedia", "fr")], limits)
+    assert est["download_mb"] == 236 and est["minutes"] >= 5
+    small = mb.BuildLimits(max_download_bytes=10 * mb.MB)
+    est = mb.estimate([mb.WikimediaSource("wikisource", "fr")], small)
+    assert est["download_mb"] == 10 and est["words"] == 1_680_000
+
+    (tmp_path / "a.txt").write_text("x" * 6000, encoding="utf-8")
+    (tmp_path / "b.odt").write_bytes(b"x" * 8000)
+    (tmp_path / "c.png").write_bytes(b"x" * 99999)
+    folder = mb.FolderSource(str(tmp_path))
+    assert folder.estimate_words() == 2000
+    est = mb.estimate([folder], limits)
+    assert est["download_mb"] == 0 and est["words"] == 2000
+    est = mb.estimate([folder, mb.WikimediaSource("wikisource", "fr")], small)
+    assert est["words"] == 2000 + 1_680_000
 
 
 def test_unknown_project_is_rejected():

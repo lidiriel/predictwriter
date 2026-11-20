@@ -42,25 +42,29 @@ class OptionsHandler(unohelper.Base, XContainerWindowEventHandler):
     """Event handler of the Options page.
 
     LibreOffice calls ``callHandlerMethod(window, event, "external_event")``
-    with ``event`` = ``"initialize"``, ``"ok"`` or ``"back"``.
+    with ``event`` = ``"initialize"``, ``"ok"`` or ``"back"``, and
+    ``"build_model"`` for the button of the page (OptionsPage.xdl).
     """
 
     def __init__(self, ctx: Any) -> None:
         self.ctx = ctx
 
     def callHandlerMethod(self, window: Any, event: Any, method: str) -> bool:
-        if method != "external_event":
+        if method not in self.getSupportedMethodNames():
             return False
         try:
             from predictive import uno_glue
 
+            if method == "build_model":  # "Build model..." button of the page
+                uno_glue.open_build_dialog(self.ctx, window)
+                return True
             return uno_glue.options_page_event(self.ctx, window, str(event))
         except Exception:
             logging.getLogger("predictive").exception("options page failed")
             return False
 
     def getSupportedMethodNames(self) -> tuple:
-        return ("external_event",)
+        return ("external_event", "build_model")
 
 
 g_ImplementationHelper = unohelper.ImplementationHelper()
