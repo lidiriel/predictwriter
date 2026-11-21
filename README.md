@@ -4,16 +4,17 @@ Predictive word completion for LibreOffice Writer, backed by Hunspell dictionari
 To build it, see [Build](#build); to install it, see [Installation](#installation).
 
 
-Writing a letter by Anatole France:
+Writing a paragraph by Alfred Fouillée:
 
-https://github.com/user-attachments/assets/9496e424-ec04-4483-b57f-5fda7c5552b1
+https://github.com/user-attachments/assets/17393ab1-89ff-4e9f-a36e-0bbe7c725017
 
-*Text: opening of Anatole France's letter to Marcel Cachin, « On croit mourir pour la
-patrie, on meurt pour des industriels », published in* L'Humanité *on 18 July 1922
-(public domain). Typed with context prediction on (Wikipedia model): 836 characters in
-635 keystrokes, 24% fewer.*
+*Text: extract of Alfred Fouillée, « L’Influence et l’avenir des idées cartésiennes »,
+published in the* Revue des Deux Mondes *in 1893 (public domain;
+[Wikisource](https://fr.wikisource.org/wiki/L%E2%80%99Influence_et_l%27avenir_des_id%C3%A9es_cart%C3%A9siennes)).
+Typed with context prediction on (Wikipedia model): 898 characters in 658 keystrokes,
+27% fewer.*
 
-## Status: suggestion list + context prediction + French grammar
+## Status: suggestion list + context prediction + French grammar + model builder
 
 While you type, a list of the most likely words appears under the cursor:
 6 at a time, and you can scroll through up to 30 (both adjustable). Optionally, the
@@ -91,6 +92,8 @@ The bottom of the page shows the version and the git commit the extension was bu
 | Accept a completion with: Tab or Enter, Tab only, Enter only | Tab or Enter |
 | Accept a next-word prediction with: same choices | Tab only (Enter keeps making a new paragraph) |
 
+The **Build model…** button, next to the model line, builds the n-gram model (see below).
+
 Changes apply as soon as you press OK or Apply, without restarting. Automatic
 language detection from the text comes in the futur.
 
@@ -110,25 +113,61 @@ list offers the next word: `il a été ` → *réalisé, découvert, créé…*,
 (vendored, Apache-2.0), runs in a background thread, and the dictionary list is shown
 first and replaced when the context predictions arrive.
 
-The model is not shipped with the extension: build it once on your machine.
+The model is not shipped with the extension: build it once on your machine with the
+**Build model…** button of the Options page.
+
+![The Build model dialog](docs/build-dialog.png)
+
+| Choice | Default | |
+| --- | --- | --- |
+| **My documents** | off | every `.odt`, `.txt` and `.pdf` file of a folder and its subfolders (PDF: see below) |
+| **Wikimedia project** | on, Wikisource | Wikisource, Wikipedia, Wikinews or Wikiquote in the model's language |
+| Maximum download (MB) | 250 | for the Wikimedia project |
+| Maximum words read (millions) | 30 | your documents are read first |
+| Keep word groups seen at least (times) | 2 | rarer groups are dropped, which keeps the model small |
+
+Before you start, the dialog estimates the words, the download, the time, the model size and
+the free disk space needed. While it builds, a progress bar shows the download and the words
+read. **Cancel build** keeps the current model; **Close** lets the build go on in the
+background (the Options page shows *Building a new model…*). Once finished, the new model
+**replaces** the current one and is used at once, without restarting LibreOffice. The
+dialog remembers your choices.
+
+Some builds in French, measured:
+
+| Source | Download | Words | Time | Model |
+| --- | --- | --- | --- | --- |
+| Wikipedia, 250 MB limit | ~236 MB | 30 million | ~5 min | 314 MB |
+| Wikisource, 2 MB limit | 2 MB | 336,000 | 7 s | a few MB |
+| 4 PDF guides (22 MB, 220 pages) | none | 65,000 | 1 s | 1 MB |
+
+How it works:
+
+- **Wikimedia text** comes from the official
+  [CirrusSearch dumps](https://dumps.wikimedia.org/other/cirrus_search_index/) over HTTPS,
+  in 25 MB slices with a 2 s pause between them. Nothing is stored except the model.
+- **PDF files** are read with `pdftotext`, and counted for the estimate with `pdfinfo`.
+  Both come with poppler-utils (`sudo apt install poppler-utils`; already installed on
+  most Linux desktops). Without them, PDF files are skipped and the dialog says so before
+  the build. A damaged or protected file is skipped too, and listed in `log.txt`.
+- **The build runs in a separate Python process** at low priority, so typing in Writer
+  stays smooth. On Linux this is the system's `python3`; on Windows and macOS, the Python
+  that ships with LibreOffice (untested).
+
+Without LibreOffice, the same build runs from the command line:
 
 ```bash
-# French Wikipedia, 30 million words: ~236 MB downloaded, ~5 min, 314 MB model
-python3 tools/train_ngrams.py --wikipedia
-# Smaller / quicker, or with your own documents too:
-python3 tools/train_ngrams.py --wikipedia --max-words 5000000
-python3 tools/train_ngrams.py --wikipedia --folder ~/Documents
+python3 tools/train_ngrams.py --wikisource                      # 250 MB at most
+python3 tools/train_ngrams.py --wikipedia --max-download-mb 100
+python3 tools/train_ngrams.py --folder ~/Documents --wikisource
+python3 tools/train_ngrams.py --help                            # all the options
 ```
 
-The Wikipedia dump is read over HTTPS in slices (range requests), never stored whole:
-`--slice-mb` (default 25), `--max-slices` (default 10 per dump file, i.e. at most
-250 MB) and `--pause` between slices (default 2 s). Reading stops at `--max-words`
-(default 30 million) or after the last slice, whichever comes first.
+It writes `~/.config/libreoffice/4/user/predictive-writer/ngrams_fr_FR.sqlite` (`--out`
+for another path); restart LibreOffice to use a model built this way. Then tick the
+context options in the Options page.
 
-It writes `~/.config/libreoffice/4/user/predictive-writer/ngrams_fr_FR.sqlite`. Then tick
-the context options in the Options page (restart LibreOffice after rebuilding a model).
-
-**Licence of a Wikipedia model:** Wikipedia text is CC BY-SA 4.0 (and GFDL). A model built
+**Licence of a Wikimedia model:** Wikimedia text is CC BY-SA 4.0 (and GFDL). A model built
 from it is for your own use; if you share it, keep it under CC BY-SA 4.0 with the
 attribution recorded in its `_meta` table (source, dump date, licence).
 
@@ -153,6 +192,9 @@ attribution recorded in its `_meta` table (source, dump date, licence).
   forms (`mangeotter`) may appear at the end of a list.
 - **Dead keys / IME:** a character composed with a dead key (`^` + `e`) may not trigger
   a suggestion until the next key.
+- **A new model replaces the old one:** new documents cannot be added to an existing
+  model; build it again with all its sources. The estimate is a rough guide, especially
+  for PDF files (counted at 300 words per page).
 
 ## Build
 
@@ -167,7 +209,7 @@ python3 tools/build_oxt.py                     # -> dist/predictive-writer-<vers
 To try a build on your own machine (see [Installation](#installation)):
 
 ```bash
-unopkg add -f dist/predictive-writer-1.2.oxt   # close LibreOffice first
+unopkg add -f dist/predictive-writer-1.3.oxt   # close LibreOffice first
 soffice --writer                               # start from a terminal to see errors
 ```
 
@@ -185,7 +227,7 @@ git push origin v1.3      # also publishes the GitHub release, see below
 
 Between two tags, builds keep the last tag's version (LibreOffice versions are
 numbers only) and the bottom of the Options page shows how far from the tag they are,
-e.g. *Predictive Writer 1.2 (+3 commits) — commit abc1234 of 2026-11-20 09:00*, with
+e.g. *Predictive Writer 1.3 (+3 commits) — commit abc1234 of 2026-11-20 09:00*, with
 *(with uncommitted changes)* if the working tree was modified. Installing a newer `.oxt`
 with `unopkg add -f` replaces the old one.
 
@@ -249,7 +291,7 @@ Third-party data and their licences (MPL 2.0, CC BY-SA 4.0...) are listed in
 On any computer, from the packaged extension `predictive-writer-<version>.oxt`, built
 with [Build](#build) or downloaded from the
 [Releases page](https://github.com/lidiriel/predictwriter/releases)
-(about 2 MB; current version: **1.2**, shown in **Tools → Extension Manager**).
+(about 2 MB; current version: **1.3**, shown in **Tools → Extension Manager**).
 
 ### Prerequisites
 
@@ -257,16 +299,17 @@ with [Build](#build) or downloaded from the
 | --- | --- | --- |
 | LibreOffice | 7.0 or later (tested with 25.2 on Debian 13) | same |
 | Python support in LibreOffice | `sudo apt install python3-uno` — **not installed automatically** with `libreoffice-writer`; without it the extension does not start | Fedora: `libreoffice-pyuno`; Windows / macOS: included with LibreOffice (untested) |
+| Optional: PDF files for the model | `sudo apt install poppler-utils` (`pdftotext`, `pdfinfo`) | Fedora: `poppler-utils`; Windows / macOS: PDF files are skipped |
 
-Nothing else: the word lists (French and English, with frequencies and grammar data)
+Nothing else is needed: the word lists (French and English, with frequencies and grammar data)
 and pressagio are inside the `.oxt` — no Hunspell, no `pip` package.
 
 ### Steps
 
-1. Copy `predictive-writer-1.2.oxt` to the computer.
+1. Copy `predictive-writer-1.3.oxt` to the computer.
 2. Close LibreOffice, then install the extension:
    ```bash
-   unopkg add predictive-writer-1.2.oxt
+   unopkg add predictive-writer-1.3.oxt
    ```
    or, in LibreOffice, **Tools → Extension Manager → Add…**
 3. Start Writer and turn off the built-in completion: **Tools → AutoCorrect Options →
@@ -281,8 +324,13 @@ and pressagio are inside the `.oxt` — no Hunspell, no `pip` package.
 
 ### Optional: context prediction model
 
-Context ranking and next-word prediction need the n-gram model (about 314 MB), which is
-not in the `.oxt`. Either copy an existing `ngrams_fr_FR.sqlite` into the profile folder:
+Context ranking and next-word prediction need an n-gram model, which is not in the `.oxt`.
+Build it with **Tools → Options → Languages and Locales → Predictive Text → Build model…**
+(see [Context prediction](#context-prediction-n-grams)), then tick **Rank completions by
+the previous words** and **Predict the next word after a space**.
+
+You can also copy a model built on another computer into the profile folder (restart
+LibreOffice afterwards):
 
 | System | Location |
 | --- | --- |
@@ -290,24 +338,15 @@ not in the `.oxt`. Either copy an existing `ngrams_fr_FR.sqlite` into the profil
 | Windows | `%APPDATA%\LibreOffice\4\user\predictive-writer\ngrams_fr_FR.sqlite` |
 | macOS | `~/Library/Application Support/LibreOffice/4/user/predictive-writer/ngrams_fr_FR.sqlite` |
 
-or rebuild it on that computer (needs this project folder, Python 3 and internet access;
-about 236 MB downloaded, about 5 minutes):
-
-```bash
-python3 tools/train_ngrams.py --wikipedia               # Linux: written to the folder above
-python3 tools/train_ngrams.py --wikipedia --out <path>  # Windows / macOS: give the path
-```
-
-Then tick **Rank completions by the previous words** and **Predict the next word after a
-space** in the Options page (restart LibreOffice if Writer was already open).
-
 ### Checking that it works
 
 `log.txt`, in the same `predictive-writer` folder, should contain after opening Writer:
 
-- `Predictive Writer 1.2 — commit … starting` (the version and the commit it was built from)
+- `Predictive Writer 1.3 — commit … starting` (the version and the commit it was built from)
 - `loaded fr_FR: 449932 words` a few seconds later
 - `context prediction: using …` if the model is in place and the options are ticked
+- after a build from the Options page: `model builder will run with …` (the Python used),
+  then `model build finished: exit 0, done` and `new n-gram model installed`
 
 ### Uninstall
 
@@ -335,5 +374,5 @@ Dicollecte dictionary). The `.oxt` includes this `LICENSE` file.
 Bundled third-party code and data keep their own licences — pressagio (Apache 2.0), word
 lists derived from Hunspell dictionaries (MPL 2.0 / SCOWL), word frequencies from
 OpenSubtitles and elision scores from Wikipedia (CC BY-SA 4.0) — see
-[extension/NOTICE.md](extension/NOTICE.md). An n-gram model you build from Wikipedia is
-CC BY-SA 4.0 too (see Context prediction).
+[extension/NOTICE.md](extension/NOTICE.md). An n-gram model you build from a Wikimedia
+project is CC BY-SA 4.0 too (see Context prediction).

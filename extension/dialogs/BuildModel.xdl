@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dlg:window PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "dialog.dtd">
+<!-- "Build model" dialog, opened by the button of the Options page.
+     Control ids and handler methods (vnd.sun.star.UNO:...) are used by
+     predictive/uno_glue.py (BuildDialog). -->
+<dlg:window xmlns:dlg="http://openoffice.org/2000/dialog"
+            xmlns:script="http://openoffice.org/2000/script"
+            dlg:id="BuildModel" dlg:left="60" dlg:top="40" dlg:width="290" dlg:height="262"
+            dlg:closeable="true" dlg:moveable="true" dlg:title="Build the prediction model">
+  <dlg:bulletinboard>
+    <dlg:fixedline dlg:id="HeaderSources" dlg:left="6" dlg:top="4" dlg:width="278" dlg:height="8"
+                   dlg:value="Sources"/>
+    <dlg:checkbox dlg:id="UseFolder" dlg:tab-index="0" dlg:left="12" dlg:top="17" dlg:width="270" dlg:height="10"
+                  dlg:value="My documents (.odt, .txt and .pdf files in a folder and its subfolders):" dlg:checked="false">
+      <script:event script:event-name="on-itemstatechange" script:macro-name="vnd.sun.star.UNO:changed" script:language="UNO"/>
+    </dlg:checkbox>
+    <dlg:textfield dlg:id="Folder" dlg:tab-index="1" dlg:left="24" dlg:top="30" dlg:width="200" dlg:height="13">
+      <script:event script:event-name="on-textchange" script:macro-name="vnd.sun.star.UNO:changed" script:language="UNO"/>
+    </dlg:textfield>
+    <dlg:button dlg:id="Browse" dlg:tab-index="2" dlg:left="228" dlg:top="29" dlg:width="56" dlg:height="15"
+                dlg:value="Browse...">
+      <script:event script:event-name="on-performaction" script:macro-name="vnd.sun.star.UNO:browse" script:language="UNO"/>
+    </dlg:button>
+    <dlg:checkbox dlg:id="UseWikimedia" dlg:tab-index="3" dlg:left="12" dlg:top="52" dlg:width="100" dlg:height="10"
+                  dlg:value="Wikimedia project:" dlg:checked="true">
+      <script:event script:event-name="on-itemstatechange" script:macro-name="vnd.sun.star.UNO:changed" script:language="UNO"/>
+    </dlg:checkbox>
+    <dlg:menulist dlg:id="Project" dlg:tab-index="4" dlg:left="115" dlg:top="50" dlg:width="90" dlg:height="13"
+                  dlg:spin="true">
+      <script:event script:event-name="on-itemstatechange" script:macro-name="vnd.sun.star.UNO:changed" script:language="UNO"/>
+    </dlg:menulist>
+    <dlg:text dlg:id="Language" dlg:left="210" dlg:top="52" dlg:width="74" dlg:height="10" dlg:value=""/>
+    <dlg:text dlg:id="LicenceNote" dlg:left="24" dlg:top="66" dlg:width="260" dlg:height="20" dlg:multiline="true"
+              dlg:value=""/>
+
+    <dlg:fixedline dlg:id="HeaderLimits" dlg:left="6" dlg:top="90" dlg:width="278" dlg:height="8"
+                   dlg:value="Limits"/>
+    <dlg:text dlg:id="MaxDownloadLabel" dlg:left="12" dlg:top="104" dlg:width="160" dlg:height="10"
+              dlg:value="Maximum download (MB):"/>
+    <dlg:numericfield dlg:id="MaxDownload" dlg:tab-index="5" dlg:left="175" dlg:top="102" dlg:width="50" dlg:height="13"
+                      dlg:decimal-accuracy="0" dlg:value-min="1" dlg:value-max="10000" dlg:value="250"
+                      dlg:spin="true" dlg:strict-format="true">
+      <script:event script:event-name="on-textchange" script:macro-name="vnd.sun.star.UNO:changed" script:language="UNO"/>
+    </dlg:numericfield>
+    <dlg:text dlg:id="MaxWordsLabel" dlg:left="12" dlg:top="120" dlg:width="160" dlg:height="10"
+              dlg:value="Maximum words read (millions):"/>
+    <dlg:numericfield dlg:id="MaxWords" dlg:tab-index="6" dlg:left="175" dlg:top="118" dlg:width="50" dlg:height="13"
+                      dlg:decimal-accuracy="0" dlg:value-min="1" dlg:value-max="500" dlg:value="30"
+                      dlg:spin="true" dlg:strict-format="true">
+      <script:event script:event-name="on-textchange" script:macro-name="vnd.sun.star.UNO:changed" script:language="UNO"/>
+    </dlg:numericfield>
+    <dlg:text dlg:id="MinCountLabel" dlg:left="12" dlg:top="136" dlg:width="160" dlg:height="10"
+              dlg:value="Keep word groups seen at least (times):"/>
+    <dlg:numericfield dlg:id="MinCount" dlg:tab-index="7" dlg:left="175" dlg:top="134" dlg:width="50" dlg:height="13"
+                      dlg:decimal-accuracy="0" dlg:value-min="1" dlg:value-max="20" dlg:value="2"
+                      dlg:spin="true" dlg:strict-format="true">
+      <script:event script:event-name="on-textchange" script:macro-name="vnd.sun.star.UNO:changed" script:language="UNO"/>
+    </dlg:numericfield>
+    <dlg:text dlg:id="Estimate" dlg:left="12" dlg:top="152" dlg:width="272" dlg:height="20" dlg:multiline="true"
+              dlg:value=""/>
+
+    <dlg:fixedline dlg:id="HeaderProgress" dlg:left="6" dlg:top="178" dlg:width="278" dlg:height="8"
+                   dlg:value="Progress"/>
+    <dlg:progressmeter dlg:id="Progress" dlg:left="12" dlg:top="191" dlg:width="272" dlg:height="10"
+                       dlg:value="0" dlg:value-min="0" dlg:value-max="100"/>
+    <dlg:text dlg:id="Status" dlg:left="12" dlg:top="205" dlg:width="272" dlg:height="20" dlg:multiline="true"
+              dlg:value=""/>
+
+    <dlg:button dlg:id="Build" dlg:tab-index="8" dlg:left="104" dlg:top="238" dlg:width="56" dlg:height="15"
+                dlg:value="Build" dlg:default="true">
+      <script:event script:event-name="on-performaction" script:macro-name="vnd.sun.star.UNO:build" script:language="UNO"/>
+    </dlg:button>
+    <dlg:button dlg:id="CancelBuild" dlg:tab-index="9" dlg:left="164" dlg:top="238" dlg:width="60" dlg:height="15"
+                dlg:value="Cancel build" dlg:disabled="true">
+      <script:event script:event-name="on-performaction" script:macro-name="vnd.sun.star.UNO:cancel" script:language="UNO"/>
+    </dlg:button>
+    <dlg:button dlg:id="Close" dlg:tab-index="10" dlg:left="228" dlg:top="238" dlg:width="56" dlg:height="15"
+                dlg:value="Close">
+      <script:event script:event-name="on-performaction" script:macro-name="vnd.sun.star.UNO:close" script:language="UNO"/>
+    </dlg:button>
+  </dlg:bulletinboard>
+</dlg:window>

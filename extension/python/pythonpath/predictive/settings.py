@@ -41,6 +41,14 @@ DEFAULTS: Dict[str, Any] = {
     "accept_completion": "tab_enter",
     "accept_next_word": "tab",
     "debug": False,  # log every keystroke (contains typed words)
+    # "Build model" dialog (Options page): last choices, kept for next time.
+    "build_use_folder": False,
+    "build_folder": "",
+    "build_use_wikimedia": True,
+    "build_project": "wikisource",  # wikisource | wikipedia | wikinews | wikiquote
+    "build_max_download_mb": 250,  # total download for the Wikimedia project
+    "build_max_words_millions": 30,
+    "build_min_count": 2,  # n-grams seen fewer times are dropped
 }
 
 

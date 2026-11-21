@@ -48,11 +48,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import uno
 import unohelper
-from com.sun.star.awt import XCallback, XKeyHandler
+from com.sun.star.awt import XCallback, XDialogEventHandler, XKeyHandler
 from com.sun.star.document import XDocumentEventListener
 from com.sun.star.view import XSelectionChangeListener
 
 from predictive import buildinfo, keymap
+from predictive.build_runner import BuildProcess, builder_command, find_python
 from predictive.engine import SENTENCE_END, Engine
 from predictive.nextword import NextWordPredictor, model_info
 from predictive.logsetup import LOGGER_NAME, setup_logging
@@ -707,6 +708,155 @@ def _is_text_document(model: Any) -> bool:
         return False
 
 
+class _BuildDeferred(unohelper.Base, XCallback):
+    """AsyncCallback target: hands build events over to the main thread."""
+
+    def __init__(self, manager: "ModelBuildManager") -> None:
+        self._manager = manager
+
+    def notify(self, data: Any) -> None:
+        self._manager.flush()
+
+
+class ModelBuildManager:
+    """Builds the n-gram model in a separate process (Options page).
+
+    The child writes ``<model>.new``; on success the manager installs it with
+    :meth:`App.install_model`. Events from the child arrive on a reader
+    thread and are handed over to the main thread with AsyncCallback; the UI
+    registers listeners with :meth:`add_listener`.
+    """
+
+    def __init__(self, app: "App") -> None:
+        self.app = app
+        self.process: Optional[BuildProcess] = None
+        self.last_event: Optional[Dict[str, Any]] = None
+        self._listeners: List[Callable[[Dict[str, Any]], None]] = []
+        self._queue: List[Dict[str, Any]] = []
+        self._lock = threading.Lock()
+        self._async: Any = None
+        self._deferred = _BuildDeferred(self)
+        self._python: Optional[str] = None
+
+    @property
+    def running(self) -> bool:
+        return self.process is not None and self.process.running
+
+    def add_listener(self, listener: Callable[[Dict[str, Any]], None]) -> None:
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def remove_listener(self, listener: Callable[[Dict[str, Any]], None]) -> None:
+        if listener in self._listeners:
+            self._listeners.remove(listener)
+
+    def program_dir(self) -> Optional[str]:
+        """LibreOffice's program folder (bundled Python on Windows/macOS)."""
+        try:
+            smgr = self.app.ctx.getServiceManager()
+            subst = smgr.createInstanceWithContext(
+                "com.sun.star.util.PathSubstitution", self.app.ctx
+            )
+            return uno.fileUrlToSystemPath(subst.substituteVariables("$(prog)", True))
+        except Exception:
+            log.debug("cannot resolve $(prog)", exc_info=True)
+            return None
+
+    def start(
+        self,
+        sources: List[str],
+        max_download_mb: int,
+        max_words: int,
+        min_count: int,
+    ) -> Optional[str]:
+        """Start a build; returns an error message, or None if it started."""
+        if self.running:
+            return "A build is already running."
+        if not sources:
+            return "Choose at least one source."
+        if self._python is None:
+            self._python = find_python(self.program_dir())
+        if self._python is None:
+            return "No Python interpreter found to run the build."
+        new_path = self.app.model_path() + ".new"
+        command = builder_command(
+            self._python,
+            new_path,
+            self.app.language,
+            sources,
+            max_download_mb,
+            max_words,
+            min_count,
+        )
+        if self._async is None:
+            self._async = self.app.ctx.getServiceManager().createInstanceWithContext(
+                "com.sun.star.awt.AsyncCallback", self.app.ctx
+            )
+        self.last_event = None
+        self.process = BuildProcess(command, new_path, self._post, self._post_exit)
+        try:
+            self.process.start()
+        except OSError as exc:
+            self.process = None
+            return "Cannot start the build: %s" % exc
+        return None
+
+    def cancel(self) -> None:
+        if self.process is not None:
+            self.process.cancel()
+
+    # Reader thread -> main thread ----------------------------------------------
+    def _post(self, event: Dict[str, Any]) -> None:
+        if event.get("event") == "skipped":  # the dialog only shows a count
+            log.info(
+                "model build: skipped %s: %s", event.get("path"), event.get("reason")
+            )
+        with self._lock:
+            self._queue.append(event)
+        self._async.addCallback(self._deferred, None)
+
+    def _post_exit(self, code: int, last: Optional[Dict[str, Any]]) -> None:
+        self._post({"event": "exit", "code": code, "last": last or {}})
+
+    def flush(self) -> None:
+        """Main thread: apply the queued events and notify the listeners."""
+        with self._lock:
+            events, self._queue = self._queue, []
+        for event in events:
+            if event.get("event") == "exit":
+                event = self._finish(event)
+            self.last_event = event
+            for listener in list(self._listeners):
+                try:
+                    listener(event)
+                except Exception:
+                    log.exception("build listener failed")
+
+    def _finish(self, exit_event: Dict[str, Any]) -> Dict[str, Any]:
+        last = exit_event.get("last") or {}
+        new_path = self.app.model_path() + ".new"
+        if exit_event.get("code") == 0 and last.get("event") == "done":
+            try:
+                self.app.install_model(new_path)
+            except OSError as exc:
+                log.exception("cannot install the new model")
+                return {
+                    "event": "error",
+                    "message": "Cannot install the model: %s" % exc,
+                }
+            return dict(last, event="installed")
+        try:
+            os.remove(new_path)
+        except OSError:
+            pass
+        if last.get("event") in ("cancelled", "error"):
+            return last
+        return {
+            "event": "error",
+            "message": "build failed (exit %s)" % exit_event.get("code"),
+        }
+
+
 class App:
     """Process-wide state: settings, engine and document tracker."""
 
@@ -721,6 +871,7 @@ class App:
         self._worker_model = ""
         self._configure()
         self.tracker = DocumentTracker(self)
+        self.builder = ModelBuildManager(self)
 
     @property
     def enabled(self) -> bool:
@@ -774,6 +925,21 @@ class App:
             self.worker = PredictionWorker(factory, on_result)
             self._worker_model = path
             log.info("context prediction: using %s", path)
+
+    def install_model(self, new_path: str) -> None:
+        """Replace the n-gram model by ``new_path`` (main thread).
+
+        The prediction thread holds the old model open: stop it first (on
+        Windows an open file cannot be replaced), then restart it on the new
+        model if context prediction is on.
+        """
+        if self.worker is not None:
+            self.worker.close()
+            self.worker = None
+            self._worker_model = ""
+        os.replace(new_path, self.model_path())
+        log.info("new n-gram model installed: %s", self.model_path())
+        self._update_worker()
 
     @property
     def list_rows(self) -> int:
@@ -916,23 +1082,22 @@ def options_page_event(ctx: Any, window: Any, event: str) -> bool:
 
 def model_status(app: App) -> str:
     """One line describing the n-gram model, for the Options page."""
-    path = app.model_path()
-    info = model_info(path)
+    if app.builder.running:
+        return "Building a new model for %s..." % app.language
+    info = model_info(app.model_path())
     if not info:
-        return (
-            "No model for %s. Build one with: python3 tools/train_ngrams.py "
-            "--wikipedia" % app.language
-        )
+        return "No model for %s yet: use Build model..." % app.language
     parts = ["Model %s:" % info.get("language", app.language)]
     if "words" in info:
-        parts.append("%s words," % "{:,}".format(int(info["words"])).replace(",", " "))
-    if "ngrams_3" in info:
-        parts.append(
-            "%s 3-grams," % "{:,}".format(int(info["ngrams_3"])).replace(",", " ")
-        )
-    if "wikipedia_dump" in info:
-        parts.append("Wikipedia %s (CC BY-SA 4.0)," % info["wikipedia_dump"])
-    parts.append("built %s." % info.get("created", "?"))
+        words = int(info["words"])
+        if words >= 1_000_000:
+            parts.append("%.1f M words," % (words / 1e6))
+        else:
+            parts.append("%s words," % "{:,}".format(words).replace(",", " "))
+    dumps = sorted(key for key in info if key.endswith("_dump"))
+    for key in dumps:
+        parts.append("%s %s," % (key[: -len("_dump")], info[key]))
+    parts.append("built %s." % str(info.get("created", "?"))[:10])
     return " ".join(parts)
 
 
@@ -1012,3 +1177,309 @@ def _save_options_page(app: App, window: Any) -> None:
     current = {key: app.settings[key] for key in changes}
     if changes != current:
         app.update_settings(**changes)
+
+
+# "Build model" dialog (button of the Options page) ---------------------------
+# Control names in dialogs/BuildModel.xdl.
+BLD_USE_FOLDER = "UseFolder"
+BLD_FOLDER = "Folder"
+BLD_USE_WIKIMEDIA = "UseWikimedia"
+BLD_PROJECT = "Project"
+BLD_LANGUAGE = "Language"
+BLD_LICENCE_NOTE = "LicenceNote"
+BLD_MAX_DOWNLOAD = "MaxDownload"
+BLD_MAX_WORDS = "MaxWords"
+BLD_MIN_COUNT = "MinCount"
+BLD_ESTIMATE = "Estimate"
+BLD_PROGRESS = "Progress"
+BLD_STATUS = "Status"
+BLD_BUILD = "Build"
+BLD_CANCEL = "CancelBuild"
+
+# Folder of the extension (…/predictive-writer.oxt/): pythonpath/predictive/..
+EXTENSION_DIR = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+
+
+class BuildDialog(unohelper.Base, XDialogEventHandler):
+    """The dialog: sources, limits, estimate, Build / Cancel / Close.
+
+    Closing the dialog during a build does not stop it: the build continues
+    in the background and the Options page shows its state.
+    """
+
+    METHODS = ("changed", "browse", "build", "cancel", "close")
+
+    def __init__(self, app: App, page: Any) -> None:
+        self.app = app
+        self.page = page  # the Options page window, or None
+        self.dialog: Any = None
+
+    # Opening -----------------------------------------------------------------
+    def execute(self) -> None:
+        from predictive import build_ui
+
+        smgr = self.app.ctx.getServiceManager()
+        provider = smgr.createInstanceWithContext(
+            "com.sun.star.awt.DialogProvider2", self.app.ctx
+        )
+        url = uno.systemPathToFileUrl(
+            os.path.join(EXTENSION_DIR, "dialogs", "BuildModel.xdl")
+        )
+        self.dialog = self._create(provider, url)
+        settings = self.app.settings
+        self._set(BLD_USE_FOLDER, "State", 1 if settings["build_use_folder"] else 0)
+        self._set(BLD_FOLDER, "Text", str(settings["build_folder"]))
+        self._set(
+            BLD_USE_WIKIMEDIA, "State", 1 if settings["build_use_wikimedia"] else 0
+        )
+        project = self._model(BLD_PROJECT)
+        project.StringItemList = build_ui.PROJECT_LABELS
+        current = str(settings["build_project"])
+        index = build_ui.PROJECTS.index(current) if current in build_ui.PROJECTS else 0
+        project.SelectedItems = (index,)
+        self._set(BLD_LANGUAGE, "Label", "(%s)" % self.app.language)
+        self._set(BLD_LICENCE_NOTE, "Label", build_ui.LICENCE_NOTE)
+        self._model(BLD_LICENCE_NOTE).TextColor = 0x808080
+        self._set(BLD_MAX_DOWNLOAD, "Value", float(settings["build_max_download_mb"]))
+        self._set(BLD_MAX_WORDS, "Value", float(settings["build_max_words_millions"]))
+        self._set(BLD_MIN_COUNT, "Value", float(settings["build_min_count"]))
+        self.changed()
+        builder = self.app.builder
+        if builder.running and builder.last_event:
+            self._show(builder.last_event)  # build continuing in the background
+        elif builder.last_event:  # finished earlier: its result, empty bar
+            text, _value = build_ui.progress(builder.last_event, 1)
+            if text:
+                self._set(BLD_STATUS, "Label", "Last build: " + text)
+        self._update_buttons()
+        builder.add_listener(self._on_event)
+        try:
+            self.dialog.execute()
+        finally:
+            builder.remove_listener(self._on_event)
+            self._save_choices()
+            self.dialog.dispose()
+            self.dialog = None
+            self._refresh_page()
+
+    def _create(self, provider: Any, url: str) -> Any:
+        """The dialog, child of the Options window when there is one.
+
+        Without a parent, the window manager may open the dialog behind the
+        Options window (e.g. Cinnamon when LibreOffice is not focused).
+        """
+        peer = None
+        if self.page is not None:
+            try:
+                peer = self.page.getPeer()
+            except Exception:
+                peer = None
+        if peer is not None:
+            try:
+                args = (
+                    uno.createUnoStruct("com.sun.star.beans.NamedValue"),
+                    uno.createUnoStruct("com.sun.star.beans.NamedValue"),
+                )
+                args[0].Name, args[0].Value = "ParentWindow", peer
+                args[1].Name, args[1].Value = "EventHandler", self
+                return provider.createDialogWithArguments(url, args)
+            except Exception:
+                log.debug("dialog with parent failed", exc_info=True)
+        return provider.createDialogWithHandler(url, self)
+
+    # Handler -----------------------------------------------------------------
+    def callHandlerMethod(self, dialog: Any, event: Any, method: str) -> bool:
+        try:
+            if method == "changed":
+                self.changed()
+            elif method == "browse":
+                self.browse()
+            elif method == "build":
+                self.build()
+            elif method == "cancel":
+                self.app.builder.cancel()
+            elif method == "close":
+                self.dialog.endExecute()
+            else:
+                return False
+        except Exception:
+            log.exception("build dialog: %s failed", method)
+        return True
+
+    def getSupportedMethodNames(self) -> tuple:
+        return self.METHODS
+
+    # Actions -----------------------------------------------------------------
+    def changed(self) -> None:
+        """A choice changed: enable the controls and update the estimate."""
+        from predictive import build_ui
+
+        use_folder = self._get(BLD_USE_FOLDER, "State") == 1
+        use_web = self._get(BLD_USE_WIKIMEDIA, "State") == 1
+        for name in ("Folder", "Browse"):
+            self._set(name, "Enabled", use_folder)
+        for name in (BLD_PROJECT, BLD_MAX_DOWNLOAD):
+            self._set(name, "Enabled", use_web)
+        choices = self._choices()
+        try:
+            text = build_ui.estimate_text(
+                build_ui.sources(
+                    choices["build_use_folder"],
+                    choices["build_folder"],
+                    choices["build_use_wikimedia"],
+                    choices["build_project"],
+                ),
+                self.app.language,
+                choices["build_max_download_mb"],
+                choices["build_max_words_millions"],
+                choices["build_min_count"],
+            )
+        except Exception as exc:  # e.g. unreadable folder
+            log.debug("estimate failed", exc_info=True)
+            text = str(exc)
+        self._set(BLD_ESTIMATE, "Label", text)
+        self._update_buttons()
+
+    def browse(self) -> None:
+        picker = self.app.ctx.getServiceManager().createInstanceWithContext(
+            "com.sun.star.ui.dialogs.FolderPicker", self.app.ctx
+        )
+        current = str(self._get(BLD_FOLDER, "Text")).strip()
+        if current and os.path.isdir(current):
+            picker.setDisplayDirectory(uno.systemPathToFileUrl(current))
+        if picker.execute() == 1:  # ExecutableDialogResults.OK
+            self._set(
+                BLD_FOLDER, "Text", uno.fileUrlToSystemPath(picker.getDirectory())
+            )
+            self._set(BLD_USE_FOLDER, "State", 1)
+            self.changed()
+
+    def build(self) -> None:
+        from predictive import build_ui
+
+        choices = self._choices()
+        self._save_choices()
+        specs = build_ui.sources(
+            choices["build_use_folder"],
+            choices["build_folder"],
+            choices["build_use_wikimedia"],
+            choices["build_project"],
+        )
+        error = self.app.builder.start(
+            specs,
+            choices["build_max_download_mb"],
+            choices["build_max_words_millions"] * 1_000_000,
+            choices["build_min_count"],
+        )
+        if error:
+            self._set(BLD_STATUS, "Label", error)
+        else:
+            self._set(BLD_PROGRESS, "ProgressValue", 0)
+            self._set(BLD_STATUS, "Label", "Starting...")
+        self._update_buttons()
+
+    # Builder events (main thread) --------------------------------------------
+    def _on_event(self, event: Dict[str, Any]) -> None:
+        if self.dialog is None:
+            return
+        self._show(event)
+        self._update_buttons()
+
+    def _show(self, event: Dict[str, Any]) -> None:
+        from predictive import build_ui
+
+        max_words = int(self._get(BLD_MAX_WORDS, "Value") or 1) * 1_000_000
+        text, value = build_ui.progress(event, max_words)
+        if text:
+            self._set(BLD_STATUS, "Label", text)
+        if value is not None:
+            self._set(BLD_PROGRESS, "ProgressValue", value)
+        if event.get("event") == "installed":
+            self._refresh_page()
+
+    def _update_buttons(self) -> None:
+        running = self.app.builder.running
+        ready = bool(self._sources_chosen())
+        self._set(BLD_BUILD, "Enabled", ready and not running)
+        self._set(BLD_CANCEL, "Enabled", running)
+        for name in (BLD_USE_FOLDER, BLD_USE_WIKIMEDIA, BLD_MAX_WORDS, BLD_MIN_COUNT):
+            self._set(name, "Enabled", not running)
+        if running:
+            for name in ("Folder", "Browse", BLD_PROJECT, BLD_MAX_DOWNLOAD):
+                self._set(name, "Enabled", False)
+
+    # Helpers -----------------------------------------------------------------
+    def _choices(self) -> Dict[str, Any]:
+        from predictive import build_ui
+
+        selected = list(self._get(BLD_PROJECT, "SelectedItems") or [0])
+        index = selected[0] if selected else 0
+        return {
+            "build_use_folder": self._get(BLD_USE_FOLDER, "State") == 1,
+            "build_folder": str(self._get(BLD_FOLDER, "Text")).strip(),
+            "build_use_wikimedia": self._get(BLD_USE_WIKIMEDIA, "State") == 1,
+            "build_project": build_ui.PROJECTS[index],
+            "build_max_download_mb": int(round(self._get(BLD_MAX_DOWNLOAD, "Value"))),
+            "build_max_words_millions": int(round(self._get(BLD_MAX_WORDS, "Value"))),
+            "build_min_count": int(round(self._get(BLD_MIN_COUNT, "Value"))),
+        }
+
+    def _sources_chosen(self) -> List[str]:
+        from predictive import build_ui
+
+        c = self._choices()
+        return build_ui.sources(
+            c["build_use_folder"],
+            c["build_folder"],
+            c["build_use_wikimedia"],
+            c["build_project"],
+        )
+
+    def _save_choices(self) -> None:
+        if self.dialog is None:
+            return
+        choices = self._choices()
+        if any(self.app.settings[k] != v for k, v in choices.items()):
+            self.app.update_settings(**choices)
+
+    def _refresh_page(self) -> None:
+        if self.page is not None:
+            try:
+                _model(self.page, OPT_MODEL_STATUS).Label = model_status(self.app)
+            except Exception:  # the Options dialog was closed
+                self.page = None
+
+    def _model(self, name: str) -> Any:
+        return self.dialog.getControl(name).getModel()
+
+    def _get(self, name: str, prop: str) -> Any:
+        return getattr(self._model(name), prop)
+
+    def _set(self, name: str, prop: str, value: Any) -> None:
+        setattr(self._model(name), prop, value)
+
+
+def open_build_dialog(ctx: Any, page: Any = None) -> None:
+    """Show the "Build model" dialog (modal; the build itself runs apart)."""
+    app = start(ctx)
+    BuildDialog(app, page).execute()
+    if page is not None and app.builder.running:
+        _follow_build_on_page(app, page)
+
+
+def _follow_build_on_page(app: App, page: Any) -> None:
+    """Keep the page's model line up to date while a build runs unseen."""
+
+    def listener(event: Dict[str, Any]) -> None:
+        try:
+            _model(page, OPT_MODEL_STATUS).Label = model_status(app)
+        except Exception:  # the Options dialog was closed
+            app.builder.remove_listener(listener)
+            return
+        if event.get("event") in ("installed", "cancelled", "error"):
+            if not app.builder.running:
+                app.builder.remove_listener(listener)
+
+    app.builder.add_listener(listener)

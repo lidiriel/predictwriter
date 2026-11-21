@@ -66,8 +66,12 @@
               dlg:value="Accept a next-word prediction with:"/>
     <dlg:menulist dlg:id="AcceptNextWord" dlg:tab-index="12" dlg:left="175" dlg:top="255" dlg:width="110" dlg:height="12"
                   dlg:spin="true"/>
-    <dlg:text dlg:id="ModelStatus" dlg:left="12" dlg:top="273" dlg:width="320" dlg:height="10" dlg:multiline="true"
+    <dlg:text dlg:id="ModelStatus" dlg:left="12" dlg:top="273" dlg:width="250" dlg:height="10" dlg:multiline="true"
               dlg:value=""/>
+    <dlg:button dlg:id="BuildModel" dlg:tab-index="13" dlg:left="266" dlg:top="270" dlg:width="68" dlg:height="15"
+                dlg:value="Build model...">
+      <script:event script:event-name="on-performaction" script:macro-name="vnd.sun.star.UNO:build_model" script:language="UNO"/>
+    </dlg:button>
     <dlg:text dlg:id="Note" dlg:left="12" dlg:top="288" dlg:width="320" dlg:height="10"
               dlg:value="Tip: turn off Tools ▸ AutoCorrect Options ▸ Word Completion to avoid double completions."/>
     <dlg:text dlg:id="VersionInfo" dlg:left="12" dlg:top="302" dlg:width="320" dlg:height="10"
