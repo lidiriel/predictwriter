@@ -807,6 +807,10 @@ class ModelBuildManager:
 
     # Reader thread -> main thread ----------------------------------------------
     def _post(self, event: Dict[str, Any]) -> None:
+        if event.get("event") == "skipped":  # the dialog only shows a count
+            log.info(
+                "model build: skipped %s: %s", event.get("path"), event.get("reason")
+            )
         with self._lock:
             self._queue.append(event)
         self._async.addCallback(self._deferred, None)

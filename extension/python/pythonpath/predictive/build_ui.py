@@ -60,23 +60,27 @@ def estimate_text(
     in LibreOffice labels)."""
     if not specs:
         return "Choose your documents and/or a Wikimedia project."
-    for spec in specs:
-        if spec.startswith("folder:"):
-            source = mb.FolderSource(spec[len("folder:") :])
-            if not source.folder.is_dir():
-                return "Folder not found: %s" % source.folder
     built = [mb.parse_source(spec, language) for spec in specs]
+    folders = [s for s in built if isinstance(s, mb.FolderSource)]
+    for source in folders:
+        if not source.folder.is_dir():
+            return "Folder not found: %s" % source.folder
     est = mb.estimate(built, limits(max_download_mb, max_words_millions, min_count))
+    unread = sum(s.pdf_files for s in folders if s.pdftotext is None)
     parts = ["About %s words" % _number(est["words"])]
     if est["download_mb"]:
         parts.append("%d MB to download" % est["download_mb"])
     parts.append("about %d min" % est["minutes"])
     parts.append("model about %d MB" % max(1, est["model_mb"]))
-    return (
-        ", ".join(parts)
-        + ". Needs about %d MB free while building." % max(1, est["disk_mb"])
-        + " The new model replaces the current one."
+    text = ", ".join(parts) + ". Needs about %d MB free while building." % max(
+        1, est["disk_mb"]
     )
+    if unread:  # say it before the build, not only in the progress line
+        return text + " %d PDF file(s) will be skipped: %s." % (
+            unread,
+            mb.PDFTOTEXT_MISSING.split(": ", 1)[1],
+        )
+    return text + " The new model replaces the current one."
 
 
 def progress(event: Dict[str, Any], max_words: int) -> Tuple[str, Optional[int]]:
@@ -104,17 +108,22 @@ def progress(event: Dict[str, Any], max_words: int) -> Tuple[str, Optional[int]]
             int(min(95, 95 * words / max(1, max_words))),
         )
     if kind == "skipped":
+        if int(event.get("files", 1)) > 1:  # e.g. PDF files without pdftotext
+            return str(event.get("reason", "")), None
         return "Skipped %s: %s" % (event.get("path", ""), event.get("reason", "")), None
     if kind == "finishing":
         return "Counting and indexing %s words..." % _number(event.get("words", 0)), 96
     if kind == "done":
         return "Installing the model...", 99
     if kind == "installed":
-        return (
-            "Done: model built from %s words in %.0f s, now in use."
-            % (_number(event.get("words", 0)), float(event.get("seconds", 0))),
-            100,
+        text = "Done: model built from %s words in %.0f s, now in use." % (
+            _number(event.get("words", 0)),
+            float(event.get("seconds", 0)),
         )
+        skipped = int(event.get("skipped", 0))
+        if skipped:
+            text += " %d file(s) could not be read (see log.txt)." % skipped
+        return text, 100
     if kind == "cancelled":
         return "Cancelled; the previous model is kept.", 0
     if kind == "error":

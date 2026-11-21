@@ -6,7 +6,8 @@ page runs); see that module for the details.
 
 Sources (combinable, read in this order until ``--max-words``):
 
-* ``--folder DIR``: your own ``.odt`` and ``.txt`` files (recursively).
+* ``--folder DIR``: your own ``.odt``, ``.txt`` and ``.pdf`` files
+  (recursively; PDF needs ``pdftotext`` from poppler-utils).
 * ``--wikisource``, ``--wikipedia``, ``--wikimedia NAME``: Wikimedia projects
   in the model's language, streamed from the "CirrusSearch" dumps in slices
   (HTTP range requests), never stored. ``--max-download-mb`` is the total

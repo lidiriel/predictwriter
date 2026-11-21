@@ -11,7 +11,7 @@
     <dlg:fixedline dlg:id="HeaderSources" dlg:left="6" dlg:top="4" dlg:width="278" dlg:height="8"
                    dlg:value="Sources"/>
     <dlg:checkbox dlg:id="UseFolder" dlg:tab-index="0" dlg:left="12" dlg:top="17" dlg:width="270" dlg:height="10"
-                  dlg:value="My documents (.odt and .txt files in a folder and its subfolders):" dlg:checked="false">
+                  dlg:value="My documents (.odt, .txt and .pdf files in a folder and its subfolders):" dlg:checked="false">
       <script:event script:event-name="on-itemstatechange" script:macro-name="vnd.sun.star.UNO:changed" script:language="UNO"/>
     </dlg:checkbox>
     <dlg:textfield dlg:id="Folder" dlg:tab-index="1" dlg:left="24" dlg:top="30" dlg:width="200" dlg:height="13">

@@ -5,7 +5,8 @@ The model is a SQLite file in pressagio's format (tables ``_1_gram`` ...
 
 Sources (read in the order given, until ``max_words``):
 
-* :class:`FolderSource`: your ``.odt`` and ``.txt`` files, recursively.
+* :class:`FolderSource`: your ``.odt``, ``.txt`` and ``.pdf`` files, recursively
+  (PDF text extracted by the ``pdftotext`` tool of poppler-utils, if installed).
 * :class:`WikimediaSource`: a Wikimedia project (Wikisource, Wikipedia,
   Wikinews, Wikiquote) in one language, from the "CirrusSearch" dumps (plain
   article text, one JSON document per line, bz2). The dump files are read in
@@ -34,8 +35,10 @@ import datetime
 import json
 import os
 import re
+import shutil
 import signal
 import sqlite3
+import subprocess
 import sys
 import time
 import urllib.error
@@ -87,7 +90,16 @@ WORDS_PER_DOWNLOADED_MB = 127_000  # Wikipedia, and projects not measured
 WORDS_PER_MB_BY_PROJECT = {"wikisource": 168_000, "wikipedia": 127_000}
 # Words per byte of your files: plain text about 6 bytes per word; an .odt
 # also holds styles, a thumbnail and zip overhead.
-BYTES_PER_WORD = {".txt": 6.0, ".odt": 8.0}
+# A PDF also holds fonts, page descriptions and often images: bytes say
+# little about its text, so PDFs are estimated from their page count
+# (pdfinfo), and this figure is only the fallback without pdfinfo.
+BYTES_PER_WORD = {".txt": 6.0, ".odt": 8.0, ".pdf": 100.0}
+# Measured on French guides and theses: 220-370 words per page of text.
+WORDS_PER_PDF_PAGE = 300
+PDF_PAGES_SAMPLE = 30  # PDFs measured by an estimate; the others by size
+PDFINFO_TIMEOUT = 10
+PDF_TIMEOUT = 120  # seconds per PDF file
+PDFTOTEXT_MISSING = "pdftotext not found: install poppler-utils to read PDF files"
 WORDS_PER_SECOND = 100_000
 MODEL_BYTES_PER_WORD = 10.5
 TEMP_BYTES_PER_WORD = 40.0  # staging tables before pruning, peak
@@ -326,10 +338,108 @@ def _odt_element_text(element: ET.Element, ns: str) -> str:
     return "".join(parts)
 
 
+class PdfToolMissing(OSError):
+    """PDF files found but pdftotext is not installed (``files``: how many)."""
+
+    def __init__(self, files: int) -> None:
+        super().__init__("%d PDF file(s) skipped: %s" % (files, PDFTOTEXT_MISSING))
+        self.files = files
+
+
+def find_pdftotext() -> Optional[List[str]]:
+    """Command running ``pdftotext`` (poppler-utils), or None if missing."""
+    path = shutil.which("pdftotext")
+    return [path] if path else None
+
+
+def find_pdfinfo() -> Optional[List[str]]:
+    """Command running ``pdfinfo`` (poppler-utils), or None if missing."""
+    path = shutil.which("pdfinfo")
+    return [path] if path else None
+
+
+# (path, size, mtime) -> pages: the dialog estimates again on every change.
+_pdf_pages_cache: Dict[Tuple[str, int, float], Optional[int]] = {}
+
+
+def pdf_pages(path: str, pdfinfo: Sequence[str]) -> Optional[int]:
+    """Number of pages of a PDF file (``pdfinfo``), or None if unreadable."""
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    key = (path, stat.st_size, stat.st_mtime)
+    if key not in _pdf_pages_cache:
+        pages = None
+        try:
+            result = subprocess.run(
+                list(pdfinfo) + [path],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=PDFINFO_TIMEOUT,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            match = re.search(rb"^Pages:\s+(\d+)", result.stdout, re.MULTILINE)
+            if result.returncode == 0 and match:
+                pages = int(match.group(1))
+        except (OSError, subprocess.SubprocessError):
+            pass
+        _pdf_pages_cache[key] = pages
+    return _pdf_pages_cache[key]
+
+
+def iter_pdf_text(path: Path, pdftotext: Sequence[str]) -> Iterator[str]:
+    """Paragraphs of a PDF file, extracted by the ``pdftotext`` tool.
+
+    pdftotext breaks paragraphs into lines: lines are joined back until an
+    empty line or a page break, and a word cut by a hyphen at the end of a
+    line is joined again ("prédic-" + "tion" -> "prédiction").
+    """
+    try:
+        result = subprocess.run(
+            list(pdftotext) + ["-q", "-enc", "UTF-8", str(path), "-"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=PDF_TIMEOUT,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired:
+        raise OSError("pdftotext took more than %d s" % PDF_TIMEOUT)
+    if result.returncode != 0:
+        message = result.stderr.decode("utf-8", "replace").strip()
+        raise OSError(message or "pdftotext failed (exit %d)" % result.returncode)
+    text = result.stdout.decode("utf-8", "replace")
+    for block in re.split(r"\n\s*\n|\f", text):
+        paragraph = ""
+        for line in block.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if (
+                paragraph.endswith("-")
+                and paragraph[-2:-1].isalpha()
+                and line[:1].islower()
+            ):
+                paragraph = paragraph[:-1] + line
+            else:
+                paragraph = (paragraph + " " + line) if paragraph else line
+        if paragraph:
+            yield paragraph
+
+
 def iter_folder_texts(
-    folder: Path, on_skip: Optional[Callable[[Path, Exception], None]] = None
+    folder: Path,
+    on_skip: Optional[Callable[[Path, Exception], None]] = None,
+    pdftotext: Optional[Sequence[str]] = None,
 ) -> Iterator[str]:
-    """Paragraphs of every .odt and .txt file under ``folder``."""
+    """Paragraphs of every .odt, .txt and .pdf file under ``folder``.
+
+    PDF files are read with ``pdftotext`` (``find_pdftotext()``); without it
+    they are skipped (one ``on_skip`` call for all of them).
+    """
+    missing_pdf = 0
     for path in sorted(folder.rglob("*")):
         suffix = path.suffix.lower()
         try:
@@ -340,9 +450,16 @@ def iter_folder_texts(
                     for line in fh:
                         if line.strip():
                             yield line
+            elif suffix == ".pdf" and path.is_file():
+                if pdftotext is None:
+                    missing_pdf += 1
+                else:
+                    yield from iter_pdf_text(path, pdftotext)
         except (OSError, zipfile.BadZipFile, ET.ParseError) as exc:
             if on_skip is not None:
                 on_skip(path, exc)
+    if missing_pdf and on_skip is not None:
+        on_skip(folder, PdfToolMissing(missing_pdf))
 
 
 # Sources ---------------------------------------------------------------------------
@@ -382,41 +499,94 @@ class _Context:
 
 
 class FolderSource:
-    """Your documents: every .odt and .txt file under a folder."""
+    """Your documents: every .odt, .txt and .pdf file under a folder."""
 
     kind = "folder"
 
-    def __init__(self, folder: str) -> None:
+    def __init__(
+        self,
+        folder: str,
+        pdftotext: Optional[Sequence[str]] = None,
+        pdfinfo: Optional[Sequence[str]] = None,
+    ) -> None:
         self.folder = Path(folder).expanduser()
+        # Commands for PDF files (text, page count); found on the PATH when
+        # not given.
+        self.pdftotext = list(pdftotext) if pdftotext else find_pdftotext()
+        self.pdfinfo = list(pdfinfo) if pdfinfo else find_pdfinfo()
+        self.pdf_files = 0  # counted by estimate_words()
 
     def describe(self) -> str:
         return "folder %s" % self.folder
 
     def texts(self, ctx: _Context) -> Iterator[str]:
         def skipped(path: Path, exc: Exception) -> None:
-            ctx.progress({"event": "skipped", "path": str(path), "reason": str(exc)})
+            ctx.progress(
+                {
+                    "event": "skipped",
+                    "path": str(path),
+                    "reason": str(exc),
+                    "files": getattr(exc, "files", 1),
+                }
+            )
 
         if not self.folder.is_dir():
             raise FileNotFoundError("folder not found: %s" % self.folder)
-        yield from iter_folder_texts(self.folder, skipped)
+        yield from iter_folder_texts(self.folder, skipped, self.pdftotext)
 
     def estimate_words(self, max_files: int = 20_000) -> int:
-        """Rough word count from the file sizes (stops after ``max_files``)."""
+        """Rough word count (stops after ``max_files`` files).
+
+        .txt and .odt files: from their size. PDF files: from their page
+        count (``pdfinfo``) for the first ``PDF_PAGES_SAMPLE`` of them, the
+        others scaled by size from those; from their size without pdfinfo.
+        Also counts the PDF files in ``pdf_files``; they add no words when
+        pdftotext is missing.
+        """
         words = 0.0
         seen = 0
+        self.pdf_files = 0
+        pdfs: List[Tuple[str, int]] = []
         for root, _dirs, names in os.walk(str(self.folder)):
             for name in names:
-                per_word = BYTES_PER_WORD.get(os.path.splitext(name)[1].lower())
+                suffix = os.path.splitext(name)[1].lower()
+                per_word = BYTES_PER_WORD.get(suffix)
                 if per_word is None:
                     continue
                 seen += 1
                 if seen > max_files:
-                    return int(words)
+                    break
+                path = os.path.join(root, name)
                 try:
-                    words += os.path.getsize(os.path.join(root, name)) / per_word
+                    size = os.path.getsize(path)
                 except OSError:
-                    pass
-        return int(words)
+                    continue
+                if suffix == ".pdf":
+                    self.pdf_files += 1
+                    if self.pdftotext is not None:
+                        pdfs.append((path, size))
+                else:
+                    words += size / per_word
+            if seen > max_files:
+                break
+        return int(words + self._estimate_pdf_words(pdfs))
+
+    def _estimate_pdf_words(self, pdfs: List[Tuple[str, int]]) -> float:
+        measured_words = 0.0
+        measured_bytes = 0
+        rest_bytes = 0
+        for index, (path, size) in enumerate(pdfs):
+            pages = None
+            if self.pdfinfo is not None and index < PDF_PAGES_SAMPLE:
+                pages = pdf_pages(path, self.pdfinfo)
+            if pages is None:
+                rest_bytes += size
+            else:
+                measured_words += pages * WORDS_PER_PDF_PAGE
+                measured_bytes += size
+        if measured_bytes:
+            return measured_words + rest_bytes * measured_words / measured_bytes
+        return rest_bytes / BYTES_PER_WORD[".pdf"]
 
 
 class WikimediaSource:
@@ -701,10 +871,17 @@ def build_model(
     Raises :class:`Cancelled` if ``cancel()`` becomes true (no model written,
     an existing model at ``out`` is kept).
     """
-    progress = progress or (lambda event: None)
+    report = progress or (lambda event: None)
     cancel = cancel or (lambda: False)
     if not sources:
         raise ValueError("no source selected")
+    skipped = [0]  # files that could not be read
+
+    def progress(event: dict) -> None:
+        if event.get("event") == "skipped":
+            skipped[0] += int(event.get("files", 1))
+        report(event)
+
     out_path = Path(out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     meta: Dict[str, str] = {"language": language}
@@ -751,6 +928,7 @@ def build_model(
             "seconds": round(time.monotonic() - start, 1),
             "size": out_path.stat().st_size,
             "out": str(out_path),
+            "skipped": skipped[0],
         }
     )
     progress(
