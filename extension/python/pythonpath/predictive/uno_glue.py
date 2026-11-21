@@ -1227,7 +1227,7 @@ class BuildDialog(unohelper.Base, XDialogEventHandler):
         url = uno.systemPathToFileUrl(
             os.path.join(EXTENSION_DIR, "dialogs", "BuildModel.xdl")
         )
-        self.dialog = provider.createDialogWithHandler(url, self)
+        self.dialog = self._create(provider, url)
         settings = self.app.settings
         self._set(BLD_USE_FOLDER, "State", 1 if settings["build_use_folder"] else 0)
         self._set(BLD_FOLDER, "Text", str(settings["build_folder"]))
@@ -1263,6 +1263,31 @@ class BuildDialog(unohelper.Base, XDialogEventHandler):
             self.dialog.dispose()
             self.dialog = None
             self._refresh_page()
+
+    def _create(self, provider: Any, url: str) -> Any:
+        """The dialog, child of the Options window when there is one.
+
+        Without a parent, the window manager may open the dialog behind the
+        Options window (e.g. Cinnamon when LibreOffice is not focused).
+        """
+        peer = None
+        if self.page is not None:
+            try:
+                peer = self.page.getPeer()
+            except Exception:
+                peer = None
+        if peer is not None:
+            try:
+                args = (
+                    uno.createUnoStruct("com.sun.star.beans.NamedValue"),
+                    uno.createUnoStruct("com.sun.star.beans.NamedValue"),
+                )
+                args[0].Name, args[0].Value = "ParentWindow", peer
+                args[1].Name, args[1].Value = "EventHandler", self
+                return provider.createDialogWithArguments(url, args)
+            except Exception:
+                log.debug("dialog with parent failed", exc_info=True)
+        return provider.createDialogWithHandler(url, self)
 
     # Handler -----------------------------------------------------------------
     def callHandlerMethod(self, dialog: Any, event: Any, method: str) -> bool:
