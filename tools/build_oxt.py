@@ -171,6 +171,45 @@ def build(
     return count
 
 
+REPO_URL = "https://github.com/lidiriel/predictwriter"
+UPDATE_FILE = "predictive-writer.update.xml"
+UPDATE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<!-- Update information for LibreOffice's Extension Manager (Check for
+     Updates), attached to the GitHub release by the workflow. -->
+<description xmlns="http://openoffice.org/extensions/update/2006"
+             xmlns:xlink="http://www.w3.org/1999/xlink">
+  <identifier value="%(identifier)s"/>
+  <version value="%(version)s"/>
+  <update-download>
+    <src xlink:href="%(download)s"/>
+  </update-download>
+  <release-notes>
+    <src xlink:href="%(notes)s" lang="en"/>
+  </release-notes>
+</description>
+"""
+
+
+def identifier(src: Path) -> str:
+    """Extension identifier declared in ``description.xml``."""
+    text = (src / "description.xml").read_text(encoding="utf-8")
+    match = re.search(r'<identifier\s+value="([^"]+)"', text)
+    if not match:
+        raise ValueError("no <identifier value=...> in description.xml")
+    return match.group(1)
+
+
+def update_xml(src: Path, version: str) -> str:
+    """Contents of ``predictive-writer.update.xml`` for a release."""
+    tag_url = "%s/releases/download/v%s" % (REPO_URL, version)
+    return UPDATE_TEMPLATE % {
+        "identifier": identifier(src),
+        "version": version,
+        "download": "%s/predictive-writer-%s.oxt" % (tag_url, version),
+        "notes": "%s/releases/tag/v%s" % (REPO_URL, version),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--src", type=Path, default=ROOT / "extension")
@@ -199,6 +238,9 @@ def main() -> None:
     else:
         origin = "no git information"
     print("wrote %s (version %s, %s, %d files)" % (out, version, origin, count))
+    update = out.parent / UPDATE_FILE
+    update.write_text(update_xml(args.src, version), encoding="utf-8")
+    print("wrote %s" % update)
 
 
 if __name__ == "__main__":

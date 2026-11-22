@@ -9,8 +9,14 @@
     <name lang="en">Predictive Writer</name>
   </display-name>
   <publisher>
-    <name xlink:href="https://example.invalid" lang="en">Predictive Writer</name>
+    <name xlink:href="https://github.com/lidiriel/predictwriter" lang="en">Predictive Writer</name>
   </publisher>
+  <!-- Tools > Extension Manager > Check for Updates reads this file: each
+       GitHub release has one (written by tools/build_oxt.py), and
+       releases/latest/download/ always leads to the newest release. -->
+  <update-information>
+    <src xlink:href="https://github.com/lidiriel/predictwriter/releases/latest/download/predictive-writer.update.xml"/>
+  </update-information>
   <dependencies>
     <lo:LibreOffice-minimal-version value="7.0" d:name="LibreOffice 7.0"/>
   </dependencies>

@@ -1,5 +1,6 @@
 """The version is declared twice; both must agree and be major.minor."""
 
+import re
 import sys
 from pathlib import Path
 
@@ -169,3 +170,28 @@ def test_describe_commits_since_tag():
     )
     info["commits_since_tag"] = 0
     assert "(+" not in buildinfo.describe(info)
+
+
+def test_update_information_file():
+    """Extension Manager > Check for Updates: description.xml -> update file."""
+    import xml.etree.ElementTree as ET
+
+    src = ROOT / "extension"
+    description = (src / "description.xml").read_text(encoding="utf-8")
+    url = re.search(r'<update-information>\s*<src xlink:href="([^"]+)"', description)
+    assert url and url.group(1) == (
+        build_oxt.REPO_URL + "/releases/latest/download/" + build_oxt.UPDATE_FILE
+    )
+    assert 'xlink:href="%s"' % build_oxt.REPO_URL in description  # publisher link
+
+    root = ET.fromstring(build_oxt.update_xml(src, "1.4"))
+    ns = {
+        "u": "http://openoffice.org/extensions/update/2006",
+        "x": "http://www.w3.org/1999/xlink",
+    }
+    assert root.find("u:identifier", ns).get("value") == "net.scilink.predictivewriter"
+    assert root.find("u:version", ns).get("value") == "1.4"
+    href = root.find("u:update-download/u:src", ns).get("{%s}href" % ns["x"])
+    assert (
+        href == build_oxt.REPO_URL + "/releases/download/v1.4/predictive-writer-1.4.oxt"
+    )

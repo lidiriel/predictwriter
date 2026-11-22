@@ -76,6 +76,11 @@ Completion → Enable word completion**), otherwise both complete at once.
 
 The bottom of the page shows the version and the git commit the extension was built from.
 
+The page and the Build model dialog follow LibreOffice's interface language
+(**Tools → Options → Languages and Locales → General → User interface**, or the
+system's language when it is set to *Default*): **French** or **English** (English for
+any other language). The log stays in English.
+
 | Setting | Default |
 | --- | --- |
 | Suggest word completions while typing | on |
@@ -347,6 +352,18 @@ LibreOffice afterwards):
 - `context prediction: using …` if the model is in place and the options are ticked
 - after a build from the Options page: `model builder will run with …` (the Python used),
   then `model build finished: exit 0, done` and `new n-gram model installed`
+
+### Updates
+
+From version 1.4, **Tools → Extension Manager → Check for Updates** finds new
+versions: each GitHub release carries a small `predictive-writer.update.xml`, and the
+extension's `description.xml` points to the one of the latest release. LibreOffice then
+offers to download and install the new `.oxt` (close and restart LibreOffice afterwards).
+Versions 1.3 and older do not have this link: install 1.4 by hand once.
+
+Depending on how LibreOffice was built, it may also check by itself (Tools → Options →
+LibreOffice → Online Update); the Debian and Ubuntu packages leave that out, so use the
+button.
 
 ### Uninstall
 
