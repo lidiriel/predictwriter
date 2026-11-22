@@ -52,7 +52,8 @@ from com.sun.star.awt import XCallback, XDialogEventHandler, XKeyHandler
 from com.sun.star.document import XDocumentEventListener
 from com.sun.star.view import XSelectionChangeListener
 
-from predictive import buildinfo, keymap
+from predictive import buildinfo, i18n, keymap
+from predictive.i18n import _
 from predictive.build_runner import BuildProcess, builder_command, find_python
 from predictive.engine import SENTENCE_END, Engine
 from predictive.nextword import NextWordPredictor, model_info
@@ -86,6 +87,52 @@ def user_data_dir(ctx: Any) -> str:
     subst = smgr.createInstanceWithContext("com.sun.star.util.PathSubstitution", ctx)
     user_url = subst.substituteVariables("$(user)", True)
     return uno.fileUrlToSystemPath(user_url.rstrip("/") + "/predictive-writer")
+
+
+def ui_language(ctx: Any) -> str:
+    """LibreOffice's user-interface language ("fr", "en-US"...), or "".
+
+    Tools ▸ Options ▸ Languages and Locales ▸ General ▸ User interface is
+    stored as ``ooLocale``; empty means "Default", i.e. the system's language
+    (the LANGUAGE / LC_* / LANG variables on Linux).
+    """
+    try:
+        provider = ctx.getServiceManager().createInstanceWithContext(
+            "com.sun.star.configuration.ConfigurationProvider", ctx
+        )
+        arg = uno.createUnoStruct("com.sun.star.beans.PropertyValue")
+        arg.Name, arg.Value = "nodepath", "/org.openoffice.Setup/L10N"
+        access = provider.createInstanceWithArguments(
+            "com.sun.star.configuration.ConfigurationAccess", (arg,)
+        )
+        value = str(access.getByName("ooLocale") or "")
+        if value:
+            return value
+        system = str(access.getByName("ooSetupSystemLocale") or "")
+    except Exception:
+        log.debug("cannot read the interface language", exc_info=True)
+        system = ""
+    for name in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
+        value = os.environ.get(name, "").split(":")[0]
+        if value and value not in ("C", "POSIX"):
+            return value
+    return system
+
+
+def translate_controls(container: Any) -> None:
+    """Translate the labels of a dialog built from an English ``.xdl`` file.
+
+    Labels already translated stay as they are (``_()`` returns any text it
+    does not know unchanged).
+    """
+    for control in container.getControls():
+        model = control.getModel()
+        try:
+            label = model.Label
+        except AttributeError:
+            continue
+        if isinstance(label, str) and label:
+            model.Label = _(label)
 
 
 def read_text_before_cursor(view_cursor: Any) -> Optional[str]:
@@ -771,13 +818,13 @@ class ModelBuildManager:
     ) -> Optional[str]:
         """Start a build; returns an error message, or None if it started."""
         if self.running:
-            return "A build is already running."
+            return _("A build is already running.")
         if not sources:
-            return "Choose at least one source."
+            return _("Choose at least one source.")
         if self._python is None:
             self._python = find_python(self.program_dir())
         if self._python is None:
-            return "No Python interpreter found to run the build."
+            return _("No Python interpreter found to run the build.")
         new_path = self.app.model_path() + ".new"
         command = builder_command(
             self._python,
@@ -798,7 +845,7 @@ class ModelBuildManager:
             self.process.start()
         except OSError as exc:
             self.process = None
-            return "Cannot start the build: %s" % exc
+            return _("Cannot start the build: %s") % exc
         return None
 
     def cancel(self) -> None:
@@ -842,7 +889,7 @@ class ModelBuildManager:
                 log.exception("cannot install the new model")
                 return {
                     "event": "error",
-                    "message": "Cannot install the model: %s" % exc,
+                    "message": _("Cannot install the model: %s") % exc,
                 }
             return dict(last, event="installed")
         try:
@@ -853,7 +900,7 @@ class ModelBuildManager:
             return last
         return {
             "event": "error",
-            "message": "build failed (exit %s)" % exit_event.get("code"),
+            "message": _("build failed (exit %s)") % exit_event.get("code"),
         }
 
 
@@ -863,6 +910,7 @@ class App:
     def __init__(self, ctx: Any) -> None:
         self.ctx = ctx
         self.data_dir = user_data_dir(ctx)
+        i18n.set_language(ui_language(ctx))
         self.settings = Settings(os.path.join(self.data_dir, "settings.json"))
         self.debug = False
         self.engine = Engine()
@@ -987,10 +1035,11 @@ class App:
 
     def start(self) -> None:
         log.info(
-            "%s starting (enabled=%s, language=%s)",
-            buildinfo.describe(),
+            "%s starting (enabled=%s, language=%s, interface=%s)",
+            buildinfo.describe(translated=False),
             self.enabled,
             self.language,
+            i18n.language(),
         )
         if self.enabled:
             self.engine.preload(self.language)
@@ -1049,6 +1098,7 @@ OPT_INLINE = "Inline"
 OPT_LIST_NUMBERS = "ListNumbers"
 # Entries of the ListNumbers list and the matching setting values.
 LIST_NUMBERS_CHOICES = (NUMBERS_HIDE, NUMBERS_LEFT)
+# Labels are in English and translated where they are shown (i18n._).
 LIST_NUMBERS_LABELS = ("Hidden", "Left of the words")
 # Entries of the ListPosition list, in the order of popup_layout.POSITIONS.
 LIST_POSITION_LABELS = (
@@ -1083,22 +1133,23 @@ def options_page_event(ctx: Any, window: Any, event: str) -> bool:
 def model_status(app: App) -> str:
     """One line describing the n-gram model, for the Options page."""
     if app.builder.running:
-        return "Building a new model for %s..." % app.language
+        return _("Building a new model for %s...") % app.language
     info = model_info(app.model_path())
     if not info:
-        return "No model for %s yet: use Build model..." % app.language
-    parts = ["Model %s:" % info.get("language", app.language)]
+        return _("No model for %s yet: use Build model...") % app.language
+    parts = [_("Model %s:") % info.get("language", app.language)]
     if "words" in info:
         words = int(info["words"])
         if words >= 1_000_000:
-            parts.append("%.1f M words," % (words / 1e6))
+            parts.append(_("%s M words,") % i18n.number("%.1f" % (words / 1e6)))
         else:
-            parts.append("%s words," % "{:,}".format(words).replace(",", " "))
+            parts.append(_("%s words,") % "{:,}".format(words).replace(",", " "))
+    # The date before the sources, so that it is not cut at the end of the
+    # first line ("2026-" / "11-11") when the line wraps.
+    built = _("built %s") % str(info.get("created", "?"))[:10]
     dumps = sorted(key for key in info if key.endswith("_dump"))
-    for key in dumps:
-        parts.append("%s %s," % (key[: -len("_dump")], info[key]))
-    parts.append("built %s." % str(info.get("created", "?"))[:10])
-    return " ".join(parts)
+    sources = ["%s %s" % (key[: -len("_dump")], info[key]) for key in dumps]
+    return " ".join(parts) + " " + ", ".join([built] + sources) + "."
 
 
 def _model(window: Any, name: str) -> Any:
@@ -1107,6 +1158,7 @@ def _model(window: Any, name: str) -> Any:
 
 def _load_options_page(app: App, window: Any) -> None:
     settings = app.settings
+    translate_controls(window)
     _model(window, OPT_ENABLED).State = 1 if settings["enabled"] else 0
     _model(window, OPT_MIN_PREFIX).Value = float(settings["min_prefix"])
     _model(window, OPT_MIN_COMPLETION).Value = float(settings["min_completion"])
@@ -1114,10 +1166,10 @@ def _load_options_page(app: App, window: Any) -> None:
     _model(window, OPT_MAX_CANDIDATES).Value = float(settings["max_candidates"])
     _model(window, OPT_INLINE).State = 1 if settings["inline"] else 0
     position = _model(window, OPT_LIST_POSITION)
-    position.StringItemList = LIST_POSITION_LABELS
+    position.StringItemList = tuple(_(x) for x in LIST_POSITION_LABELS)
     position.SelectedItems = (POSITIONS.index(app.list_position),)
     numbers = _model(window, OPT_LIST_NUMBERS)
-    numbers.StringItemList = LIST_NUMBERS_LABELS
+    numbers.StringItemList = tuple(_(x) for x in LIST_NUMBERS_LABELS)
     numbers.SelectedItems = (LIST_NUMBERS_CHOICES.index(app.list_numbers),)
     _model(window, OPT_CONTEXT).State = 1 if settings["context_prediction"] else 0
     _model(window, OPT_NEXT_WORD).State = 1 if settings["next_word"] else 0
@@ -1129,7 +1181,7 @@ def _load_options_page(app: App, window: Any) -> None:
         if choice not in keymap.ACCEPT_KEY_CHOICES:
             choice = keymap.ACCEPT_KEY_CHOICES[0]
         model = _model(window, name)
-        model.StringItemList = keymap.ACCEPT_KEY_LABELS
+        model.StringItemList = tuple(_(x) for x in keymap.ACCEPT_KEY_LABELS)
         model.SelectedItems = (keymap.ACCEPT_KEY_CHOICES.index(choice),)
     _model(window, OPT_MODEL_STATUS).Label = model_status(app)
     version = _model(window, OPT_VERSION_INFO)
@@ -1228,6 +1280,8 @@ class BuildDialog(unohelper.Base, XDialogEventHandler):
             os.path.join(EXTENSION_DIR, "dialogs", "BuildModel.xdl")
         )
         self.dialog = self._create(provider, url)
+        translate_controls(self.dialog)
+        self.dialog.getModel().Title = _(self.dialog.getModel().Title)
         settings = self.app.settings
         self._set(BLD_USE_FOLDER, "State", 1 if settings["build_use_folder"] else 0)
         self._set(BLD_FOLDER, "Text", str(settings["build_folder"]))
@@ -1240,7 +1294,7 @@ class BuildDialog(unohelper.Base, XDialogEventHandler):
         index = build_ui.PROJECTS.index(current) if current in build_ui.PROJECTS else 0
         project.SelectedItems = (index,)
         self._set(BLD_LANGUAGE, "Label", "(%s)" % self.app.language)
-        self._set(BLD_LICENCE_NOTE, "Label", build_ui.LICENCE_NOTE)
+        self._set(BLD_LICENCE_NOTE, "Label", _(build_ui.LICENCE_NOTE))
         self._model(BLD_LICENCE_NOTE).TextColor = 0x808080
         self._set(BLD_MAX_DOWNLOAD, "Value", float(settings["build_max_download_mb"]))
         self._set(BLD_MAX_WORDS, "Value", float(settings["build_max_words_millions"]))
@@ -1252,7 +1306,7 @@ class BuildDialog(unohelper.Base, XDialogEventHandler):
         elif builder.last_event:  # finished earlier: its result, empty bar
             text, _value = build_ui.progress(builder.last_event, 1)
             if text:
-                self._set(BLD_STATUS, "Label", "Last build: " + text)
+                self._set(BLD_STATUS, "Label", _("Last build: ") + text)
         self._update_buttons()
         builder.add_listener(self._on_event)
         try:

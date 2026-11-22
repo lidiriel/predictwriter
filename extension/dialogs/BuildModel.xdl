@@ -5,7 +5,7 @@
      predictive/uno_glue.py (BuildDialog). -->
 <dlg:window xmlns:dlg="http://openoffice.org/2000/dialog"
             xmlns:script="http://openoffice.org/2000/script"
-            dlg:id="BuildModel" dlg:left="60" dlg:top="40" dlg:width="290" dlg:height="262"
+            dlg:id="BuildModel" dlg:left="60" dlg:top="40" dlg:width="290" dlg:height="272"
             dlg:closeable="true" dlg:moveable="true" dlg:title="Build the prediction model">
   <dlg:bulletinboard>
     <dlg:fixedline dlg:id="HeaderSources" dlg:left="6" dlg:top="4" dlg:width="278" dlg:height="8"
@@ -56,25 +56,25 @@
                       dlg:spin="true" dlg:strict-format="true">
       <script:event script:event-name="on-textchange" script:macro-name="vnd.sun.star.UNO:changed" script:language="UNO"/>
     </dlg:numericfield>
-    <dlg:text dlg:id="Estimate" dlg:left="12" dlg:top="152" dlg:width="272" dlg:height="20" dlg:multiline="true"
+    <dlg:text dlg:id="Estimate" dlg:left="12" dlg:top="152" dlg:width="272" dlg:height="30" dlg:multiline="true"
               dlg:value=""/>
 
-    <dlg:fixedline dlg:id="HeaderProgress" dlg:left="6" dlg:top="178" dlg:width="278" dlg:height="8"
+    <dlg:fixedline dlg:id="HeaderProgress" dlg:left="6" dlg:top="188" dlg:width="278" dlg:height="8"
                    dlg:value="Progress"/>
-    <dlg:progressmeter dlg:id="Progress" dlg:left="12" dlg:top="191" dlg:width="272" dlg:height="10"
+    <dlg:progressmeter dlg:id="Progress" dlg:left="12" dlg:top="201" dlg:width="272" dlg:height="10"
                        dlg:value="0" dlg:value-min="0" dlg:value-max="100"/>
-    <dlg:text dlg:id="Status" dlg:left="12" dlg:top="205" dlg:width="272" dlg:height="20" dlg:multiline="true"
+    <dlg:text dlg:id="Status" dlg:left="12" dlg:top="215" dlg:width="272" dlg:height="20" dlg:multiline="true"
               dlg:value=""/>
 
-    <dlg:button dlg:id="Build" dlg:tab-index="8" dlg:left="104" dlg:top="238" dlg:width="56" dlg:height="15"
+    <dlg:button dlg:id="Build" dlg:tab-index="8" dlg:left="104" dlg:top="248" dlg:width="56" dlg:height="15"
                 dlg:value="Build" dlg:default="true">
       <script:event script:event-name="on-performaction" script:macro-name="vnd.sun.star.UNO:build" script:language="UNO"/>
     </dlg:button>
-    <dlg:button dlg:id="CancelBuild" dlg:tab-index="9" dlg:left="164" dlg:top="238" dlg:width="60" dlg:height="15"
+    <dlg:button dlg:id="CancelBuild" dlg:tab-index="9" dlg:left="164" dlg:top="248" dlg:width="60" dlg:height="15"
                 dlg:value="Cancel build" dlg:disabled="true">
       <script:event script:event-name="on-performaction" script:macro-name="vnd.sun.star.UNO:cancel" script:language="UNO"/>
     </dlg:button>
-    <dlg:button dlg:id="Close" dlg:tab-index="10" dlg:left="228" dlg:top="238" dlg:width="56" dlg:height="15"
+    <dlg:button dlg:id="Close" dlg:tab-index="10" dlg:left="228" dlg:top="248" dlg:width="56" dlg:height="15"
                 dlg:value="Close">
       <script:event script:event-name="on-performaction" script:macro-name="vnd.sun.star.UNO:close" script:language="UNO"/>
     </dlg:button>

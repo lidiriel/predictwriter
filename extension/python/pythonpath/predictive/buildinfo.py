@@ -26,23 +26,32 @@ def load(path: Optional[str] = None) -> Dict[str, object]:
     return data if isinstance(data, dict) else {}
 
 
-def describe(info: Optional[Dict[str, object]] = None) -> str:
-    """One line such as ``Predictive Writer 1.0 — commit 04ab2b9 of 2026-11-11 20:35``."""
+def describe(info: Optional[Dict[str, object]] = None, translated: bool = True) -> str:
+    """One line such as ``Predictive Writer 1.0 — commit 04ab2b9 of 2026-11-11 20:35``.
+
+    In the interface language (Options page), or in English for the log
+    (``translated=False``).
+    """
+    from predictive.i18n import _ as translate
+
+    def _(text: str) -> str:
+        return translate(text) if translated else text
+
     info = load() if info is None else info
     version = info.get("version") or __version__
     text = "Predictive Writer %s" % version
     since = info.get("commits_since_tag")
     if isinstance(since, int) and since > 0:
-        text += " (+%d commit%s)" % (since, "s" if since > 1 else "")
+        text += _(" (+1 commit)") if since == 1 else _(" (+%d commits)") % since
     if not info:
-        return text + " — development version (not packaged)"
+        return text + _(" — development version (not packaged)")
     commit, date = info.get("commit"), str(info.get("commit_date") or "")
     if commit:
         # ISO 8601 "2026-11-11T20:35:10+01:00" -> "2026-11-11 20:35"
         when = date[:16].replace("T", " ") if date else "?"
-        text += " — commit %s of %s" % (commit, when)
+        text += _(" — commit %s of %s") % (commit, when)
         if info.get("modified"):
-            text += " (with uncommitted changes)"
+            text += _(" (with uncommitted changes)")
     elif info.get("built"):
-        text += " — built %s" % str(info["built"])[:16].replace("T", " ")
+        text += _(" — built %s") % str(info["built"])[:16].replace("T", " ")
     return text

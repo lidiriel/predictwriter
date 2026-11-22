@@ -24,6 +24,7 @@ MOD_ALT = 4  # KeyModifier.MOD2
 
 # Accept-key settings ("accept_completion", "accept_next_word").
 ACCEPT_KEY_CHOICES = ("tab_enter", "tab", "enter")
+# In English; translated where they are shown (i18n._).
 ACCEPT_KEY_LABELS = ("Tab or Enter", "Tab only", "Enter only")
 
 
