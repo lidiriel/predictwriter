@@ -1,6 +1,6 @@
 # Test, lint and package the LibreOffice extension.
 #
-# - Every push and pull request: tests on every Python that LibreOffice uses
+# - Every push (any branch) and pull request: tests on every Python that LibreOffice uses
 #   (3.8-3.13, Linux, plus Windows), lint, and the .oxt as a downloadable
 #   artifact of the run ("Actions" tab).
 # - A tag "v<major>.<minor>" (e.g. v1.2): it *is* the version (tools/build_oxt.py
@@ -9,7 +9,7 @@ name: Build extension
 
 on:
   push:
-    branches: [main, master]
+    branches: ["**"]  # every branch, so work branches are tested before merging
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
